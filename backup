@@ -1,0 +1,514 @@
+#!/bin/bash
+VERSION="1.0.0"
+FOLDER="/home/$(whoami)/.backup"
+CONFIG_FILE="/home/$(whoami)/.backup/backup.conf"
+DEFAULT_LIST="/home/$(whoami)/.backup/backup.list"
+DEFAULT_BACKUP_LOCATION="/home/$(whoami)/.backup/backup"
+INSTALL_PATH=/usr/local/bin/backup
+
+function CheckRoot {
+    if [ whoami != root ]
+    then
+        if [ -z "$SUDO_COMMAND" ]
+        then
+            echo "please run as root"
+            exit 1
+        fi
+    fi
+}
+
+function Install {
+    if [ "$0" == "$INSTALL_PATH" ]
+    then
+        echo "the program is already installed"
+    else
+        CheckRoot
+        echo "$(cat $0)" > $INSTALL_PATH
+        chmod +x $INSTALL_PATH
+    fi
+}
+
+function WriteConfigFile {
+    echo "#where should the backups should be stored?" > $CONFIG_FILE
+    echo "backup_folder=$DEFAULT_BACKUP_LOCATION" >> $CONFIG_FILE
+    echo "" >> $CONFIG_FILE
+
+    echo "#Where is located the file with the backup list?" >> $CONFIG_FILE
+    echo "backup_list=\"$DEFAULT_LIST\"" >> $CONFIG_FILE
+    chmod 700 $CONFIG_FILE
+}
+
+function WriteBackupListExample {
+    echo "invalid" > $DEFAULT_LIST
+    echo "this is an example of the backup list" >> $DEFAULT_LIST
+    echo "this file should have only the paths and the backup file names" >> $DEFAULT_LIST
+    echo "otherwise it'll be invalid" >> $DEFAULT_LIST
+    echo "you have to write the path in the inmediate line the backup file name" >> $DEFAULT_LIST
+    echo "and then the maximum number of stored backups for that path" >> $DEFAULT_LIST
+    echo "like this:" >> $DEFAULT_LIST
+    echo "/fake/path" >> $DEFAULT_LIST
+    echo "fake-file" >> $DEFAULT_LIST
+    echo "20" >> $DEFAULT_LIST
+    echo "/fake/path2" >> $DEFAULT_LIST
+    echo "fake-file-2" >> $DEFAULT_LIST
+    echo "25" >> $DEFAULT_LIST
+}
+
+
+function CheckConfig {
+    if [ ! -e $CONFIG_FILE ]
+    then
+        mkdir -p $DEFAULT_BACKUP_LOCATION
+        WriteConfigFile
+    fi
+
+    if [ ! -e $DEFAULT_LIST ]
+    then
+        WriteBackupListExample
+    fi
+    chown $user:$user -R $FOLDER
+    chmod 700 -R $FOLDER >/dev/null 2>&1
+}
+
+function PrintHelp {
+    echo "Usage:"
+    echo "  sudo ./backup -I                                                                installs the program"
+    echo "  backup -R                                                                       run the configured backups"
+    echo "  backup -b <backup-name> -f <file-path> -n                                       [<max-copys>] backs up a file for you"
+    echo "  backup -r <backup-name>                                                         restore a backup"
+    echo "  backup -l                                                                       lists all backups"
+    echo "  backup -L <backup-name>                                                         lists all storedes versions"
+    echo "  backup -d <backup-name>                                                         remove all backups"
+    echo "  backup -c                                                                       cleans up all the data (erases everything)"
+    echo "  backup -e                                                                       edit the list"
+    echo "  backup -E                                                                       edit settings"
+    echo "  backup -v                                                                       Version"
+}
+
+function PrintVersion {
+    echo "backup command, version $VERSION"
+    echo "Copyright (c) 2019"
+    echo "License GNU/GPLv3"
+}
+
+function LoadBackupList {
+    readarray -t PathList < $DEFAULT_LIST
+    if [ "${PathList[0]}" == "invalid" ]
+    then
+        echo ""
+        echo "the pathlist file is invalid, please fix it, it is located at ->"
+        echo "          $DEFAULT_LIST"
+        exit 0
+    fi
+}
+
+function LoadBackupCfg {
+    CheckConfig
+    if [ -z "$RUN_UNSTORED_BACKUP" ]
+    then
+        LoadBackupList
+    fi
+    source $CONFIG_FILE
+}
+
+function DoBackup {
+    i=0
+    origin=""
+    destination=""
+    maxCopys=0
+    infoFileFolders=""
+    infoFileBackup=""
+    folderName=""
+
+    for item in ${PathList[@]}
+    do
+        case $i in
+
+            0)
+                origin="$item"
+                i=$((i+1))
+            ;;
+
+            1)
+                destinationFolder="$backup_folder/$item/$(date +%d-%m-%Y)"
+                destination="$destinationFolder/$item-$(date +%H-%M-%S).tar"
+                infoFileFolders="$backup_folder/$item/backupFolders"
+                infoFileBackup="$backup_folder/$item/backups-$(date +%d-%m-%Y)"
+                infoFileLastBackup="$backup_folder/$item/lastBackup"
+                folderName="$item"
+
+                mkdir -p $destinationFolder
+                
+                echo "$origin" > "$backup_folder/$item/origin"
+                                
+                lastBackup=""
+                if [ -e "$infoFileLastBackup" ]
+                then
+                    lastBackup=$(cat $infoFileLastBackup)
+                fi
+
+                if [ ! -e "$infoFileFolders" ]
+                then
+                    echo "$(date "+%d-%m-%Y")" > $infoFileFolders
+                else
+                    if [ "$lastBackup" != "$(date "+%d-%m-%Y")" ]
+                    then
+                        echo "$(date "+%d-%m-%Y")" >> $infoFileFolders
+                    fi
+                fi
+
+                if [ ! -e "$infoFileBackup" ]
+                then
+                    echo "$destination" > $infoFileBackup
+                else
+                    echo "$destination" >> $infoFileBackup
+                fi
+
+                echo "$(date "+%d-%m-%Y")" > $infoFileLastBackup
+
+                i=$((i+1))
+            ;;
+
+            2)
+                maxCopys=$item
+                tar -vcf "$destination" "$(realpath --relative-to=$(pwd) "$origin")"
+
+                numberOfDates=$(echo $(wc -l $infoFileFolders) | cut -d' ' -f 1)
+                readarray -t dates < "$infoFileFolders"
+                files=""
+                copysToErase=0
+
+                for item2 in ${dates[@]}
+                do
+                    readarray -t files < "$backup_folder/$folderName/backups-$item2"
+                done
+
+                if [ ${#files[@]} -gt $maxCopys ]
+                then
+                    copysToErase=$((${#files[@]}-$maxCopys))
+                fi
+
+                if [ $copysToErase -gt 0 ]
+                then
+                    j=0
+                    while [ $j -lt $copysToErase ]
+                    do
+                        rm "${files[$j]}"
+                        j=$(($j+1))
+                    done
+                fi
+
+                rmdir $backup_folder/$folderName/* >/dev/null 2>&1
+
+                i=0
+            ;;
+
+        esac
+
+    done
+
+}
+
+function RestoreFile {
+    source $CONFIG_FILE
+    origin=$(cat $1/origin)
+    rm -rf "$origin"
+    cd $1/$2
+    tar -xf $3 --directory $(dirname $(dirname $origin))
+}
+
+function Resotore {
+    CheckConfig
+    source $CONFIG_FILE
+    folder="$backup_folder/$1"
+    dateExists=0
+
+    if [ "$(echo $(wc -l $folder/backupFolders) | cut -d' ' -f 1)" == "1" ]
+    then
+        date="$(cat "$folder/backupFolders")"
+        dateExists=1
+    else
+        echo "Input the date:"
+        echo -n "   Type the day and press [ENTER]: "
+        read day
+        echo -n "   Type the month and press [ENTER]: "
+        read month
+        echo -n "   Type the year and press [ENTER]: "
+        read year
+        date=$(date -d "$month/$day/$year" "+%d-%m-%Y")
+    fi
+
+    if [ ! -e $folder ]
+    then
+        echo -n "Is the file on a different folder? [S/N]: "
+        read response
+        while [ "$response" != "n" ]
+        do
+            echo -n "Which is the folder location?: "
+            read location
+            if [ -e "$(realpath $location -L)" ]
+            then
+                folder=$location
+                break
+            else
+                echo -n "Is the file on a different folder? [S/N]: "
+                read response
+            fi
+        done
+    fi
+
+    readarray -t dates < "$folder/backupFolders"
+    for item in ${dates[@]}
+    do
+        if [ "$item" == "$date" ]
+        then
+            dateExists=1
+            break
+        fi
+    done
+
+    if [ $dateExists == 1 ]
+    then
+        readarray -t files < "$folder/backups-$date"
+        if [ "$(echo $(wc -l $folder/backups-$date) | cut -d' ' -f 1)" == "1" ]
+        then
+            RestoreFile $folder "$date" "${files[0]}"
+            exit 0
+        fi
+
+        i=0
+        for item in ${files[@]}
+        do
+            echo "Archivo: #$i : $item"
+            i=$(($i+1))
+        done
+
+        echo -n "Type the number of the file you wanna restore and press [ENTER]: "
+        read number
+        if [ $number -gt ${#files[@]} ]
+        then
+            echo "number too big"
+            exit 0
+        fi
+
+        RestoreFile $folder "$date" "${files[$number]}"
+
+    else
+        echo "The date $date doesn't exist"
+        exit 0
+    fi
+}
+
+function ListAllBackups {
+    source $CONFIG_FILE
+    ls $backup_folder
+}
+
+function ListBackups {
+    source $CONFIG_FILE
+    if [ -z "$1" ]
+    then
+        echo "Missing argument, expecting backup name"
+    fi
+    folder=$backup_folder/$1
+    if [ ! -e "$folder" ]
+    then
+        echo "That backup doesn't exist"
+        exit 0
+    fi
+    readarray -t dates < "$folder/backupFolders"
+    for item in ${dates[@]}
+    do
+        echo "$item"
+        readarray -t files < "$folder/backups-$item"
+        for item2 in ${files[@]}
+        do
+            echo "  $(basename $item2)"
+        done
+    done
+}
+
+function GetEditor {
+    source $CONFIG_FILE
+    if [ -z "$editor" ]
+    then
+        echo -n "Type the executable of your text editor and press [ENTER]: "
+        read editor
+        echo "the path to the editor is: $editor"
+        echo -n "is that correct? [S/N]: "
+        read response
+        while [ "$response" != "s" ]
+        do
+            echo -n "Type the executable of your text editor and press [ENTER]: "
+            read editor
+            echo "the path to the editor is: $editor"
+            echo -n "is that correct? [S/N]: "
+            read response
+        done
+        echo "" >> $CONFIG_FILE
+        echo "#your preferred textfile editor" >> $CONFIG_FILE
+        echo "editor=$editor" >> $CONFIG_FILE
+    fi
+}
+
+function EditList {
+    GetEditor
+    $editor $DEFAULT_LIST
+}
+
+function EditConfig {
+    GetEditor
+    $editor $CONFIG_FILE
+}
+
+function RemoveBackup {
+    chmod 700 -R $FOLDER >/dev/null 2>&1
+    source $CONFIG_FILE
+    folder=$backup_folder/$1
+    if [ ! -e $folder ]
+    then
+        echo "that backup doesn't exist"
+    else
+        echo "you are about to delete all your backups on: $1"
+        echo -n "are you sure? [YES/NO]: "
+        read response
+        if [ "$response" == "YES" ]
+        then
+            rm -rf $folder
+        else
+            echo "You scared me :v"
+        fi
+    fi
+}
+
+function RemoveAllData {
+    chmod 700 -R $FOLDER >/dev/null 2>&1
+    source $CONFIG_FILE >/dev/null 2>&1
+    echo "are you sure you want to DELETE ALL YOUR BACKUPS?"
+    echo -n "[YES I'M FUCKING SHURE, SHUT UP AND OBEY ME/n]: "
+    read response
+    if [ "$response" == "YES I'M FUCKING SHURE, SHUT UP AND OBEY ME" ]
+    then
+        echo "are you realy realy sure 100%?"
+        echo -n "[SHUT UP ALREADY/n]: "
+        read response
+        if [ "$response" == "SHUT UP ALREADY" ]
+        then
+            rm -rf $backup_folder
+            echo -n "and settings too? [YES/n]: "
+            read response
+            if [ "$response" == "YES" ]
+            then
+                WriteConfigFile
+                WriteBackupListExample
+                echo "sadly, all your data just went bye bye"
+            else
+                echo "sadly, all your backups just went bye bye"
+            fi
+        fi
+    else
+        echo "this time you realy scared me dude"
+    fi
+}
+
+#get modifiers
+declare b=0
+declare f=0
+declare n=0
+declare temporalS
+while getopts ":R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I" o
+do
+    case "${o}" in
+
+        R)
+            LoadBackupCfg
+            DoBackup
+        ;;
+
+        b)
+            RUN_UNSTORED_BACKUP=true
+            temporalS[0]="$OPTARG"
+            b=1
+        ;;
+
+        f)
+            temporalS[1]="$OPTARG"
+            f=1
+        ;;
+
+        n)
+            temporalS[3]="$OPTARG"
+            n=1
+        ;;
+
+        r)
+            Resotore "$OPTARG"
+        ;;
+
+        l)
+            ListAllBackups
+        ;;
+
+        L)
+            ListBackups "$OPTARG"
+        ;;
+
+        e)
+            EditList
+        ;;
+
+        E)
+            EditConfig
+        ;;
+
+        h|H)
+            PrintHelp
+        ;;
+
+        d)
+            RemoveBackup "$OPTARG"
+        ;;
+
+        c)
+            RemoveAllData
+        ;;
+
+        v)
+            PrintVersion
+        ;;
+
+        I)
+            Install
+        ;;
+
+        *)
+            LoadBackupCfg
+            DoBackup
+        ;;
+
+    esac
+done
+
+if [ ! -z "$RUN_UNSTORED_BACKUP" ]
+then
+
+    if ([ $b == 0 ] || [ $f == 0 ]) && !([ $b == 1 ] && [ $f == 1 ])
+    then
+        echo "Missing arguments"
+        echo ""
+        PrintHelp
+        exit 0
+    fi
+
+    if [ $b ]
+    then
+        source $CONFIG_FILE
+        if [ $n == 1 ]
+        then
+            PathList=("${temporalS[1]}" "${temporalS[0]}" "${temporalS[3]}")
+        else
+            PathList=("${temporalS[1]}" "${temporalS[0]}" "20")
+        fi
+        DoBackup
+    fi
+fi
