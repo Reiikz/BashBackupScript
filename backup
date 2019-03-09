@@ -87,17 +87,19 @@ function PrintHelp {
     echo "Usage:"
     echo "  sudo ./backup -I                                                                installs the program"
     echo "  backup -R                                                                       run the configured backups"
-    echo "  backup -b <backup-name> -f <file-path> -n                                       [<max-copys>] backs up a file for you"
+    echo "  backup -b <backup-name> -f <file-path> [OPTIONAL]-n <max-copys>                 backs up a file for you"
     echo "  backup -r <backup-name>                                                         restore a backup"
     echo "  backup -l                                                                       lists all backups"
     echo "  backup -L <backup-name>                                                         lists all storedes versions"
     echo "  backup -d <backup-name>                                                         remove all backups"
+    echo "  backup -D <backup-name>                                                         delete specific backup file"
     echo "  backup -c                                                                       cleans up all the data (erases everything)"
     echo "  backup -e                                                                       edit the list"
     echo "  backup -E                                                                       edit settings"
     echo "  backup -i                                                                       installs settings files"
     echo "  backup -v                                                                       Version"
     echo "  backup -g <output-path>                                                         returns the backup"
+    echo "  (you can combine -g <output-path> with -R or with -b <backup-name> -f <file-path>)"
 }
 
 function PrintVersion {
@@ -124,6 +126,85 @@ function LoadBackupCfg {
         LoadBackupList
     fi
     LoadConfig
+}
+
+function GetFile {
+    folder=$1
+    if [ ! -e "$folder" ]
+    then
+        echo "that backup doesn't exist"
+    fi
+
+    folderCount=$(wc -l $folder/backupFolders | cut -d' ' -f 1)
+    if [ $folderCount == 1 ]
+    then
+        dateFile=$folder/backups-$(cat $folder/backupFolders)
+        filesCount=$(wc -l $dateFile | cut -d' ' -f 1)
+        date=$(cat $folder/backupFolders)
+        if [ $filesCount == 1 ]
+        then
+            file=$(cat $dateFile)
+        else
+            readarray -t files < "$dateFile"
+            i=0
+            for item in ${files[@]}
+            do
+                echo "   File #$i: $item"
+                i=$(($i+1))
+            done
+            echo "Type the number of the file you wanna select"
+            echo -n "then press [Enter]: "
+            read number
+            if [ -z $number ]
+            then
+                echo "Invalid input"
+                exit 0
+            fi
+            if [ $number -gt $(($filesCount-1)) ]
+            then
+                echo "number too big"
+                exit 0
+            fi
+            file=${files[$number]}
+        fi
+    else
+        echo "Type de date of the copu you wanna select"
+        echo -n "   Type the day and press [ENTER]: "
+        read day
+        echo -n "   Type the month and press [ENTER]: "
+        ready month
+        echo -n "   Type the year and press [ENTER]: "
+        read year
+        date=$(date -d "$month/$day/$year" "+%d-%m-%Y")
+        if [ ! -e "$folder/$date" ]
+        then
+            echo "that date doesn't exist"
+            exit 0
+        fi
+        dateFile=$folder/backups-$date
+        filesCount=$(wc -l $dateFile | cut -d' ' -f 1)
+        if [ $filesCount == 1 ]
+        then
+            file=$(cat $dateFile)
+        else
+            readarray -t files < "$dateFile"
+            i=0
+            for item in ${files[@]}
+            do
+                echo "   File #$i: $item"
+                i=$(($i+1))
+            done
+            echo "Type the number of the file you wanna select"
+            echo -n "then press [Enter]: "
+            read number
+            if [ $number -gt $(($filesCount-1)) ]
+            then
+                echo "number too big"
+                exit 0
+            fi
+            file=${files[$number]}
+        fi
+    fi
 }
 
 function DoBackup {
@@ -246,90 +327,14 @@ function RestoreFile {
     LoadConfig
     origin=$(cat $1/origin)
     rm -rf "$origin"
-    cd $1/$2
-    tar -xf $3 --directory $(dirname $(dirname $origin))
+    tar -xf $2 --directory $(dirname $origin)
 }
 
 function Resotore {
-    CheckConfig
     LoadConfig
     folder="$backup_folder/$1"
-    dateExists=0
-
-    if [ "$(echo $(wc -l $folder/backupFolders) | cut -d' ' -f 1)" == "1" ]
-    then
-        date="$(cat "$folder/backupFolders")"
-        dateExists=1
-    else
-        echo "Input the date:"
-        echo -n "   Type the day and press [ENTER]: "
-        read day
-        echo -n "   Type the month and press [ENTER]: "
-        read month
-        echo -n "   Type the year and press [ENTER]: "
-        read year
-        date=$(date -d "$month/$day/$year" "+%d-%m-%Y")
-    fi
-
-    if [ ! -e $folder ]
-    then
-        echo -n "Is the file on a different folder? [S/N]: "
-        read response
-        while [ "$response" != "n" ]
-        do
-            echo -n "Which is the folder location?: "
-            read location
-            if [ -e "$(realpath $location -L)" ]
-            then
-                folder=$location
-                break
-            else
-                echo -n "Is the file on a different folder? [S/N]: "
-                read response
-            fi
-        done
-    fi
-
-    readarray -t dates < "$folder/backupFolders"
-    for item in ${dates[@]}
-    do
-        if [ "$item" == "$date" ]
-        then
-            dateExists=1
-            break
-        fi
-    done
-
-    if [ $dateExists == 1 ]
-    then
-        readarray -t files < "$folder/backups-$date"
-        if [ "$(echo $(wc -l $folder/backups-$date) | cut -d' ' -f 1)" == "1" ]
-        then
-            RestoreFile $folder "$date" "${files[0]}"
-            exit 0
-        fi
-
-        i=0
-        for item in ${files[@]}
-        do
-            echo "Archivo: #$i : $item"
-            i=$(($i+1))
-        done
-
-        echo -n "Type the number of the file you wanna restore and press [ENTER]: "
-        read number
-        if [ $number -gt ${#files[@]} ]
-        then
-            echo "number too big"
-            exit 0
-        fi
-
-        RestoreFile $folder "$date" "${files[$number]}"
-
-    else
-        echo "The date $date doesn't exist"
-        exit 0
-    fi
+    GetFile $folder
+    RestoreFile $folder $file
 }
 
 function ListAllBackups {
@@ -444,13 +449,43 @@ function RemoveAllData {
     fi
 }
 
+function DeleteSpecificBackup {
+    LoadConfig
+    folder="$backup_folder/$1"
+    if [ ! -e "$folder" ]
+    then
+        echo "that backup doesn't exist"
+        exit 0
+    fi
+    GetFile $folder
+    echo "Are you sure you wanna delete the folloing backup?:"
+    echo "          $file"
+    echo -n "[YES/NO]: "
+    read response
+    if [ "$response" == "YES" ]
+    then
+        rm $file
+        readarray -t files < "$folder/backups-$date"
+        rm "$folder/backups-$date"
+        for item in ${files[@]}
+        do
+            if [ -e "$item" ]
+            then
+                echo "$item" >> "$folder/backups-$date"
+            fi
+        done
+    else
+        exit 0
+    fi
+}
+
 #get modifiers
 declare b=0
 declare f=0
 declare n=0
 declare temporalS
 declare RUN_R=0
-while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i" o
+while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i :D:" o
 do
     case "${o}" in
 
@@ -522,6 +557,10 @@ do
             CheckConfig
         ;;
 
+        D)
+            DeleteSpecificBackup "$OPTARG"
+        ;;
+
     esac
 done
 
@@ -554,4 +593,16 @@ then
         fi
         DoBackup
     fi
+    exit 0
+fi
+
+if [ ! -z "$GetBackup" ]
+then
+    LoadConfig
+    echo -n "Type the name of the backup and press [ENTER]: "
+    read name
+    folder=$backup_folder/$name
+    echo "$folder"
+    GetFile $folder
+    cp $file $GetBackup
 fi
