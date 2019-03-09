@@ -25,10 +25,12 @@ function Install {
         CheckRoot
         echo "$(cat $0)" > $INSTALL_PATH
         chmod +x $INSTALL_PATH
+        CheckConfig
     fi
 }
 
 function WriteConfigFile {
+    mkdir -p $DEFAULT_BACKUP_LOCATION
     echo "#where should the backups should be stored?" > $CONFIG_FILE
     echo "backup_folder=$DEFAULT_BACKUP_LOCATION" >> $CONFIG_FILE
     echo "" >> $CONFIG_FILE
@@ -39,6 +41,7 @@ function WriteConfigFile {
 }
 
 function WriteBackupListExample {
+    mkdir -p $DEFAULT_BACKUP_LOCATION
     echo "invalid" > $DEFAULT_LIST
     echo "this is an example of the backup list" >> $DEFAULT_LIST
     echo "this file should have only the paths and the backup file names" >> $DEFAULT_LIST
@@ -66,6 +69,7 @@ function CheckConfig {
     then
         WriteBackupListExample
     fi
+    user=$(whoami)
     chown $user:$user -R $FOLDER
     chmod 700 -R $FOLDER >/dev/null 2>&1
 }
