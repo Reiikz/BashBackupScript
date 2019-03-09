@@ -6,6 +6,16 @@ DEFAULT_LIST="/home/$(whoami)/.backup/backup.list"
 DEFAULT_BACKUP_LOCATION="/home/$(whoami)/.backup/backup"
 INSTALL_PATH=/usr/local/bin/backup
 
+function LoadConfig {
+    if [ ! -e $CONFIG_FILE ]
+    then
+        echo "Config file was missing"
+        CheckConfig
+        exit 0
+    fi
+    source $CONFIG_FILE
+}
+
 function CheckRoot {
     if [ whoami != root ]
     then
@@ -25,7 +35,6 @@ function Install {
         CheckRoot
         echo "$(cat $0)" > $INSTALL_PATH
         chmod +x $INSTALL_PATH
-        CheckConfig
     fi
 }
 
@@ -86,6 +95,7 @@ function PrintHelp {
     echo "  backup -c                                                                       cleans up all the data (erases everything)"
     echo "  backup -e                                                                       edit the list"
     echo "  backup -E                                                                       edit settings"
+    echo "  backup -i                                                                       installs settings files"
     echo "  backup -v                                                                       Version"
 }
 
@@ -112,7 +122,7 @@ function LoadBackupCfg {
     then
         LoadBackupList
     fi
-    source $CONFIG_FILE
+    LoadConfig
 }
 
 function DoBackup {
@@ -214,7 +224,7 @@ function DoBackup {
 }
 
 function RestoreFile {
-    source $CONFIG_FILE
+    LoadConfig
     origin=$(cat $1/origin)
     rm -rf "$origin"
     cd $1/$2
@@ -223,7 +233,7 @@ function RestoreFile {
 
 function Resotore {
     CheckConfig
-    source $CONFIG_FILE
+    LoadConfig
     folder="$backup_folder/$1"
     dateExists=0
 
@@ -304,12 +314,12 @@ function Resotore {
 }
 
 function ListAllBackups {
-    source $CONFIG_FILE
+    LoadConfig
     ls $backup_folder
 }
 
 function ListBackups {
-    source $CONFIG_FILE
+    LoadConfig
     if [ -z "$1" ]
     then
         echo "Missing argument, expecting backup name"
@@ -333,7 +343,7 @@ function ListBackups {
 }
 
 function GetEditor {
-    source $CONFIG_FILE
+    LoadConfig
     if [ -z "$editor" ]
     then
         echo -n "Type the executable of your text editor and press [ENTER]: "
@@ -367,7 +377,7 @@ function EditConfig {
 
 function RemoveBackup {
     chmod 700 -R $FOLDER >/dev/null 2>&1
-    source $CONFIG_FILE
+    LoadConfig
     folder=$backup_folder/$1
     if [ ! -e $folder ]
     then
@@ -387,7 +397,7 @@ function RemoveBackup {
 
 function RemoveAllData {
     chmod 700 -R $FOLDER >/dev/null 2>&1
-    source $CONFIG_FILE >/dev/null 2>&1
+    LoadConfig >/dev/null 2>&1
     echo "are you sure you want to DELETE ALL YOUR BACKUPS?"
     echo -n "[YES I'M FUCKING SHURE, SHUT UP AND OBEY ME/n]: "
     read response
@@ -420,7 +430,7 @@ declare b=0
 declare f=0
 declare n=0
 declare temporalS
-while getopts ":R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I" o
+while getopts ":R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i" o
 do
     case "${o}" in
 
@@ -485,6 +495,10 @@ do
             Install
         ;;
 
+        i)
+            CheckConfig
+        ;;
+
         *)
             LoadBackupCfg
             DoBackup
@@ -506,7 +520,7 @@ then
 
     if [ $b ]
     then
-        source $CONFIG_FILE
+        LoadConfig
         if [ $n == 1 ]
         then
             PathList=("${temporalS[1]}" "${temporalS[0]}" "${temporalS[3]}")
