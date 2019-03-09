@@ -97,6 +97,7 @@ function PrintHelp {
     echo "  backup -E                                                                       edit settings"
     echo "  backup -i                                                                       installs settings files"
     echo "  backup -v                                                                       Version"
+    echo "  backup -g <output-path>                                                         returns the backup"
 }
 
 function PrintVersion {
@@ -185,7 +186,19 @@ function DoBackup {
 
             2)
                 maxCopys=$item
-                tar -vcf "$destination" "$(realpath --relative-to=$(pwd) "$origin")"
+                originPath="$(realpath --relative-to=$(pwd) "$origin")"
+                if [ ! -e "$originPath" ]
+                then
+
+                    echo "Invalid backup path"
+                    exit 0
+                fi
+                tar -vcf "$destination" "$originPath"
+
+                if [ ! -z "$GetBackup" ]
+                then
+                    cp $destination $GetBackup
+                fi
 
                 numberOfDates=$(echo $(wc -l $infoFileFolders) | cut -d' ' -f 1)
                 readarray -t dates < "$infoFileFolders"
@@ -195,25 +208,31 @@ function DoBackup {
                 for item2 in ${dates[@]}
                 do
                     readarray -t files < "$backup_folder/$folderName/backups-$item2"
-                done
-
-                if [ ${#files[@]} -gt $maxCopys ]
-                then
-                    copysToErase=$((${#files[@]}-$maxCopys))
-                fi
-
-                if [ $copysToErase -gt 0 ]
-                then
-                    j=0
-                    while [ $j -lt $copysToErase ]
+                    copyNumber=$(echo $(wc -l $backup_folder/$folderName/backups-$item2) | cut -d' ' -f 1)
+                    if [ $copyNumber -gt $maxCopys ]
+                    then
+                        copysToErase=$(($copyNumber-$maxCopys))
+                    fi
+                    if [ $copysToErase -gt 0 ]
+                    then
+                        j=0
+                        while [ $j -lt $copysToErase ]
+                        do
+                            rm "${files[$j]}"
+                            erasedCopy[$j]=${files[$j]}
+                            j=$(($j+1))
+                        done
+                    fi
+                    
+                    rm "$backup_folder/$folderName/backups-$item2"
+                    for item3 in ${files[@]}
                     do
-                        rm "${files[$j]}"
-                        j=$(($j+1))
+                        if [ -e "$item3" ]
+                        then
+                            echo "$item3" >> "$backup_folder/$folderName/backups-$item2"
+                        fi
                     done
-                fi
-
-                rmdir $backup_folder/$folderName/* >/dev/null 2>&1
-
+                done
                 i=0
             ;;
 
@@ -430,13 +449,17 @@ declare b=0
 declare f=0
 declare n=0
 declare temporalS
-while getopts ":R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i" o
+declare RUN_R=0
+while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i" o
 do
     case "${o}" in
 
+        g)
+            GetBackup="$OPTARG"
+        ;;
+
         R)
-            LoadBackupCfg
-            DoBackup
+            RUN_R=1
         ;;
 
         b)
@@ -499,13 +522,15 @@ do
             CheckConfig
         ;;
 
-        *)
-            LoadBackupCfg
-            DoBackup
-        ;;
-
     esac
 done
+
+if [ $RUN_R == 1 ]
+then
+    LoadBackupCfg
+    DoBackup
+    exit 0
+fi
 
 if [ ! -z "$RUN_UNSTORED_BACKUP" ]
 then
