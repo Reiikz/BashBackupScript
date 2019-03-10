@@ -6,6 +6,23 @@ DEFAULT_LIST="/home/$(whoami)/.backup/backup.list"
 DEFAULT_BACKUP_LOCATION="/home/$(whoami)/.backup/backup"
 INSTALL_PATH=/usr/local/bin/backup
 
+function CheckConfig {
+    if [ ! -e $CONFIG_FILE ]
+    then
+        mkdir -p $DEFAULT_BACKUP_LOCATION
+        WriteConfigFile
+    fi
+    LoadConfig
+    configChecked=1
+    if [ ! -e $backup_list ]
+    then
+        WriteBackupListExample
+    fi
+    user=$(whoami)
+    chown $user:$user -R $FOLDER
+    chmod 700 -R $FOLDER >/dev/null 2>&1
+}
+
 function LoadConfig {
     if [ ! -e $CONFIG_FILE ]
     then
@@ -69,24 +86,6 @@ function WriteBackupListExample {
     echo "/fake/path2" >> $DEFAULT_LIST
     echo "fake-file-2" >> $DEFAULT_LIST
     echo "25" >> $DEFAULT_LIST
-}
-
-
-function CheckConfig {
-    if [ ! -e $CONFIG_FILE ]
-    then
-        mkdir -p $DEFAULT_BACKUP_LOCATION
-        WriteConfigFile
-    fi
-    LoadConfig
-    configChecked=1
-    if [ ! -e $backup_list ]
-    then
-        WriteBackupListExample
-    fi
-    user=$(whoami)
-    chown $user:$user -R $FOLDER
-    chmod 700 -R $FOLDER >/dev/null 2>&1
 }
 
 function PrintHelp {
