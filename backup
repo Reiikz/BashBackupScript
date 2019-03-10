@@ -10,6 +10,11 @@ function LoadConfig {
     if [ ! -e $CONFIG_FILE ]
     then
         echo "Config file was missing"
+        if [ ! -z "$configChecked" ]
+        then
+            echo "can not write config file"
+            exit 0
+        fi
         CheckConfig
         exit 0
     fi
@@ -73,8 +78,9 @@ function CheckConfig {
         mkdir -p $DEFAULT_BACKUP_LOCATION
         WriteConfigFile
     fi
-
-    if [ ! -e $DEFAULT_LIST ]
+    LoadConfig
+    configChecked=1
+    if [ ! -e $backup_list ]
     then
         WriteBackupListExample
     fi
@@ -99,7 +105,10 @@ function PrintHelp {
     echo "  backup -i                                                                       installs settings files"
     echo "  backup -v                                                                       Version"
     echo "  backup -g <output-path>                                                         returns the backup"
-    echo "  (you can combine -g <output-path> with -R or with -b <backup-name> -f <file-path>)"
+    echo "  backup -P <output-file>                                                         pakacges all the backups and config and outputs the file"
+    echo "  backup -S <input-file>                                                          imports backups and config"
+    echo "(you can combine -g <output-path> with -R or with -b <backup-name> -f <file-path>)"
+    echo "Is recomended the use of absolute paths"
 }
 
 function PrintVersion {
@@ -109,12 +118,12 @@ function PrintVersion {
 }
 
 function LoadBackupList {
-    readarray -t PathList < $DEFAULT_LIST
+    readarray -t PathList < $backup_list
     if [ "${PathList[0]}" == "invalid" ]
     then
         echo ""
         echo "the pathlist file is invalid, please fix it, it is located at ->"
-        echo "          $DEFAULT_LIST"
+        echo "          $backup_list"
         exit 0
     fi
 }
@@ -373,14 +382,14 @@ function GetEditor {
         echo -n "Type the executable of your text editor and press [ENTER]: "
         read editor
         echo "the path to the editor is: $editor"
-        echo -n "is that correct? [S/N]: "
+        echo -n "is that correct? [y/n]: "
         read response
-        while [ "$response" != "s" ]
+        while [ "$response" != "y" ]
         do
             echo -n "Type the executable of your text editor and press [ENTER]: "
             read editor
             echo "the path to the editor is: $editor"
-            echo -n "is that correct? [S/N]: "
+            echo -n "is that correct? [y/n]: "
             read response
         done
         echo "" >> $CONFIG_FILE
@@ -391,7 +400,7 @@ function GetEditor {
 
 function EditList {
     GetEditor
-    $editor $DEFAULT_LIST
+    $editor $backup_list
 }
 
 function EditConfig {
@@ -408,7 +417,7 @@ function RemoveBackup {
         echo "that backup doesn't exist"
     else
         echo "you are about to delete all your backups on: $1"
-        echo -n "are you sure? [YES/NO]: "
+        echo -n "are you sure? [YES/n]: "
         read response
         if [ "$response" == "YES" ]
         then
@@ -460,7 +469,7 @@ function DeleteSpecificBackup {
     GetFile $folder
     echo "Are you sure you wanna delete the folloing backup?:"
     echo "          $file"
-    echo -n "[YES/NO]: "
+    echo -n "[YEy/nO]: "
     read response
     if [ "$response" == "YES" ]
     then
@@ -479,13 +488,51 @@ function DeleteSpecificBackup {
     fi
 }
 
+function ExportAll {
+    LoadConfig
+    echo "$(basename $CONFIG_FILE)" >> names
+    echo "$(basename $backup_list)" >> names
+    echo "$(basename $backup_folder)" >> names
+    outputFile=$(realpath $1 -L)
+    tar -cf $outputFile names
+    rm names
+    cd $(dirname $backup_folder)
+    tar -f $outputFile -r $(basename $backup_folder)
+    cd $(dirname $CONFIG_FILE)
+    tar -f $outputFile -r $(basename "$CONFIG_FILE")
+    cd $(dirname $backup_list)
+    tar -f $outputFile -r $(basename "$backup_list")
+}
+
+function ImportAll {
+    if [ ! -e "$1" ]
+    then
+        "the file $1 does not exist"
+        exit 0
+    fi
+    tar -xf $1
+    readarray -t names < "names"
+    configFileName=${names[0]}
+    tar -cf $1 $configFileName
+    rm -rf $CONFIG_FILE
+    mkdir -p $(dirname $CONFIG_FILE)
+    mv $configFileName $CONFIG_FILE
+    LoadConfig
+    rm -rf $backup_list
+    mv ${names[1]} $backup_list
+    rm -rf $backup_folder
+    mv ${names[2]} $backup_folder/
+    rm -rf names
+    rm $1
+}
+
 #get modifiers
 declare b=0
 declare f=0
 declare n=0
 declare temporalS
 declare RUN_R=0
-while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i :D:" o
+while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i :D: :P: :S:" o
 do
     case "${o}" in
 
@@ -505,6 +552,7 @@ do
 
         f)
             temporalS[1]="$OPTARG"
+            inputFile="$OPTARG"
             f=1
         ;;
 
@@ -559,6 +607,14 @@ do
 
         D)
             DeleteSpecificBackup "$OPTARG"
+        ;;
+
+        P)
+            ExportAll "$OPTARG"
+        ;;
+
+        S)
+            ImportAll "$OPTARG"
         ;;
 
     esac
