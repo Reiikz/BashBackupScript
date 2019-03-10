@@ -104,7 +104,7 @@ function PrintHelp {
     echo "  backup -i                                                                       installs settings files"
     echo "  backup -v                                                                       Version"
     echo "  backup -g <output-path>                                                         returns the backup"
-    echo "  backup -P <output-file>                                                         pakacges all the backups and config and outputs the file"
+    echo "  backup -P <output-file>                                                         packages all the backups and config and outputs the file"
     echo "  backup -S <input-file>                                                          imports backups and config"
     echo "(you can combine -g <output-path> with -R or with -b <backup-name> -f <file-path>)"
     echo "Is recomended the use of absolute paths"
