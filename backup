@@ -282,7 +282,9 @@ function DoBackup {
                     echo "Invalid backup path"
                     exit 0
                 fi
-                tar -vcf "$destination" "$originPath"
+
+                cd $(dirname $originPath)
+                tar -vcf "$destination" "$(basename $originPath)"
 
                 if [ ! -z "$GetBackup" ]
                 then
