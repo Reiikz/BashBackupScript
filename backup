@@ -1,5 +1,5 @@
 #!/bin/bash
-VERSION="1.0.2"
+VERSION="1.1.0"
 FOLDER="$HOME/.backup"
 CONFIG_FILE="$HOME/.backup/backup.conf"
 DEFAULT_LIST="$HOME/.backup/backup.list"
@@ -106,6 +106,11 @@ function PrintHelp {
     echo "  backup -g <output-path>                                                         returns the backup"
     echo "  backup -P <output-file>                                                         packages all the backups and config and outputs the file"
     echo "  backup -S <input-file>                                                          imports backups and config"
+    echo "  backup -w                                                                       se backup folder"
+    echo "  backup -W                                                                       prints the backup folder location"
+    echo "  backup -G <output-file>                                                         outputs a backup of all your backups for specific origin"
+    echo "  backup -s <input-file>                                                          restores a backup all your backups for specific"
+    echo "  backup -o also restores the configuration for that backup when combined with -s"
     echo "(you can combine -g <output-path> with -R or with -b <backup-name> -f <file-path>)"
     echo "Is recomended the use of absolute paths"
 }
@@ -251,13 +256,15 @@ function DoBackup {
                     lastBackup=$(cat $infoFileLastBackup)
                 fi
 
+                date=$(date "+%d-%m-%Y")
                 if [ ! -e "$infoFileFolders" ]
                 then
-                    echo "$(date "+%d-%m-%Y")" > $infoFileFolders
+                    echo "$date" > $infoFileFolders
                 else
-                    if [ "$lastBackup" != "$(date "+%d-%m-%Y")" ]
+                    alreadyHasIt=$(grep -F "$date" $infoFileFolders)
+                    if [ "$lastBackup" != "$date" ] && [ -z "$alreadyHasIt" ]
                     then
-                        echo "$(date "+%d-%m-%Y")" >> $infoFileFolders
+                        echo "$date" >> $infoFileFolders
                     fi
                 fi
 
@@ -275,16 +282,16 @@ function DoBackup {
 
             2)
                 maxCopys=$item
-                originPath="$(realpath --relative-to=$(pwd) "$origin")"
-                if [ ! -e "$originPath" ]
+                echo "Backing up: $origin"
+                if [ ! -e "$origin" ]
                 then
 
                     echo "Invalid backup path"
                     exit 0
                 fi
 
-                cd $(dirname $originPath)
-                tar -vcf "$destination" "$(basename $originPath)"
+                cd $(dirname $origin)
+                tar -cf "$destination" "$(basename $origin)"
 
                 if [ ! -z "$GetBackup" ]
                 then
@@ -296,34 +303,9 @@ function DoBackup {
                 files=""
                 copysToErase=0
 
-                for item2 in ${dates[@]}
-                do
-                    readarray -t files < "$backup_folder/$folderName/backups-$item2"
-                    copyNumber=$(echo $(wc -l $backup_folder/$folderName/backups-$item2) | cut -d' ' -f 1)
-                    if [ $copyNumber -gt $maxCopys ]
-                    then
-                        copysToErase=$(($copyNumber-$maxCopys))
-                    fi
-                    if [ $copysToErase -gt 0 ]
-                    then
-                        j=0
-                        while [ $j -lt $copysToErase ]
-                        do
-                            rm "${files[$j]}"
-                            erasedCopy[$j]=${files[$j]}
-                            j=$(($j+1))
-                        done
-                    fi
-                    
-                    rm "$backup_folder/$folderName/backups-$item2"
-                    for item3 in ${files[@]}
-                    do
-                        if [ -e "$item3" ]
-                        then
-                            echo "$item3" >> "$backup_folder/$folderName/backups-$item2"
-                        fi
-                    done
-                done
+                declare -A NumberOfFilesByDate
+                totalNumber=0
+                EraseExtraCopys $maxCopys $folderName
                 i=0
             ;;
 
@@ -333,10 +315,95 @@ function DoBackup {
 
 }
 
+function EraseExtraCopys {
+    local maxCopys=$1
+    local folderName=$2
+    local folderPath=$backup_folder/$2
+    cd $folderPath
+    local folderCount=$(wc -l "backupFolders" | cut -d' ' -f 1)
+    echo "Max copys : $maxCopys"
+    if [ $folderCount == 1 ]
+    then
+        local files
+        date=$(cat "backupFolders")
+        numberFilesOnFolder=$(wc -l "backups-$date" | cut -d' ' -f 1)
+        copysToErase=$(($numberFilesOnFolder-$maxCopys))
+        if [ $copysToErase -gt 0 ]
+        then
+            readarray -t files < "backups-$date"
+            erasedCopys=0
+            rm "backups-$date"
+            for file in ${files[@]}
+            do
+                if [ $erasedCopys -lt $copysToErase ]
+                then
+                    rm $file
+                    erasedCopys=$(($erasedCopys+1))
+                else
+                    echo "$file" >> "backups-$date"
+                fi
+            done
+            echo "Erased    : $erasedCopys old copys"
+        fi
+    else
+        readarray -t folders < "backupFolders"
+        declare -A numberFilesByDate
+        totalFiles=0
+        for date in ${folders[@]}
+        do
+            number=$(wc -l "backups-$date" | cut -d' ' -f 1)
+            numberFilesByDate["$date"]=$number
+            totalFiles=$(($number+$totalFiles))
+        done
+
+        if [ $totalFiles -gt $maxCopys ]
+        then
+            copysToErase=$(($totalFiles-$maxCopys))
+            declare -A files
+            for date in ${folders[@]}
+            do
+                readarray -t fileList < "backups-$date"
+                for i in $( seq 0 $((${#fileList[@]}-1)) )
+                do
+                    files[$date,$i]=${fileList[$i]}
+                done
+            done
+            erasedCopys=0
+            declare -A erasedCopysOnDate
+            erasedCopysOnDate["${folders[0]}"]=0
+            dateNumber=0
+            while [ $erasedCopys -lt $copysToErase ]
+            do
+                date=${folders[$dateNumber]}
+                if [ ${erasedCopysOnDate[$date]} -lt ${numberFilesByDate[$date]} ]
+                then
+                    rm ${files[$date,${erasedCopysOnDate[$date]}]}
+                    grep -v "${files[$date,${erasedCopysOnDate[$date]}]}" "backups-$date" > temp
+                    rm "backups-$date"
+                    mv "temp" "backups-$date"
+                    erasedCopysOnDate[${folders[$dateNumber]}]=$((${erasedCopysOnDate[$date]}+1))
+                    erasedCopys=$(($erasedCopys+1))
+                else
+                    rmdir $date
+                    rm "backups-$date"
+                    grep -v "$date" "backupFolders" > temp
+                    rm "backupFolders"
+                    mv "temp" "backupFolders"
+                    dateNumber=$(($dateNumber+1))
+                    erasedCopysOnDate[${folders[$dateNumber]}]=0
+                fi
+            done
+            echo "Erased    : $erasedCopys old copys"
+        fi
+    fi
+    
+}
+
 function RestoreFile {
     LoadConfig
     origin=$(cat $1/origin)
     rm -rf "$origin"
+    mkdir -p $(dirname $origin)
     tar -xf $2 --directory $(dirname $origin)
 }
 
@@ -527,13 +594,119 @@ function ImportAll {
     rm $1
 }
 
+function OpenBackupFolder {
+    LoadConfig
+    if [ -z "$file_explorer" ]
+    then
+        echo -n "Type your file explorer and press [ENTER]: "
+        read fileExplorer
+        echo "" >> $CONFIG_FILE
+        echo "#this is the executable of your file explorer, if you wanna use the terminal change it for cd" >> $CONFIG_FILE
+        echo "#if you wanna use for example cinnamon's file explorer change it for \"nemo\"" >> $CONFIG_FILE
+        echo "file_explorer=$fileExplorer" >> $CONFIG_FILE
+        $fileExplorer $backup_folder
+    else
+        $file_explorer $backup_folder
+    fi
+}
+
+function SaveBackupOfBuckups {
+    LoadConfig
+    pFolder=$(realpath -L $1)
+    cd $backup_folder
+    echo -n "Type the backup name and press [ENTER]: "
+    read backup
+    if [ ! -e "$backup" ]
+    then
+        echo "that backup doesn't exist"
+    fi
+    origin=$(cat $backup/origin)
+    
+    #get backup quantity
+    LoadBackupList
+    i=0
+    now=0
+    for item in ${backup_list[@]}
+    do
+        if [ $item == $origin ]
+        then
+            now=1
+        fi
+
+        if [ $now == 1 ]
+        then
+            if [ $i == 2 ]
+            then
+                quantity=$item
+            fi
+        fi
+
+        if [ $i -lt 2 ]
+        then
+            i=$(($i+1))
+        else
+            i=0
+        fi
+    done
+
+    if [ -z "$quantity"]
+    then
+        quantity=20
+    fi
+
+    echo "#!/bin/bash" >> info
+    echo "origin=$origin" >> info
+    echo "name=$backup" >> info
+    echo "quantity=$quantity" >> info
+    chmod +x info
+
+    tar -cf $pFolder $backup info
+    rm info
+}
+
+function RestoreBackupOfBackup {
+    LoadConfig
+    cd $(dirname $1)
+    tar -xf $(basename $1)
+    if [ ! -e "info" ]
+    then
+        echo "missing info file"
+    fi
+    chmod +x info
+    source info
+    mv $name $backup_folder
+    if [ ! -z "$RESTORE_OLD_CFG" ]
+    then
+        rm info
+    else
+        LoadBackupList
+        for item in ${backup_list[@]}
+        do
+            if [ $item == $origin ]
+            then
+                exists=1
+            fi
+        done
+
+        if [ -z "$exists" ]
+        then
+            LoadConfig
+            echo "$origin" >> $backup_list
+            echo "$name" >> $backup_list
+            echo "$quantity" >> $backup_list
+        fi
+        rm info
+    fi
+
+}
+
 #get modifiers
 declare b=0
 declare f=0
 declare n=0
 declare temporalS
 declare RUN_R=0
-while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i :D: :P: :S:" o
+while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i :D: :P: :S: :w :W :G: :s: :o" o
 do
     case "${o}" in
 
@@ -618,8 +791,34 @@ do
             ImportAll "$OPTARG"
         ;;
 
+        w)
+            OpenBackupFolder
+        ;;
+
+        W)
+            LoadConfig
+            echo "$backup_folder"
+        ;;
+
+        G)
+            SaveBackupOfBuckups "$OPTARG"
+        ;;
+
+        s)
+            RESTORE_BACKUP_OF_BACKUP="$OPTARG"
+        ;;
+
+        o)
+            RESTORE_OLD_CFG=1
+        ;;
+
     esac
 done
+
+if [ ! -z "$RESTORE_BACKUP_OF_BACKUP" ]
+then
+    RestoreBackupOfBackup $RESTORE_BACKUP_OF_BACKUP
+fi
 
 if [ $RUN_R == 1 ]
 then
