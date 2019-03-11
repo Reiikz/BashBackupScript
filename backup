@@ -163,6 +163,8 @@ function GetFile {
             for item in ${files[@]}
             do
                 echo "   File #$i: $item"
+                echo "      created at: $(cat $item.time)"
+                echo ""
                 i=$(($i+1))
             done
             echo "Type the number of the file you wanna select"
@@ -185,7 +187,7 @@ function GetFile {
         echo -n "   Type the day and press [ENTER]: "
         read day
         echo -n "   Type the month and press [ENTER]: "
-        ready month
+        read month
         echo -n "   Type the year and press [ENTER]: "
         read year
         date=$(date -d "$month/$day/$year" "+%d-%m-%Y")
@@ -239,13 +241,16 @@ function DoBackup {
             ;;
 
             1)
-                destinationFolder="$backup_folder/$item/$(date +%d-%m-%Y)"
-                destination="$destinationFolder/$item-$(date +%H-%M-%S).tar"
                 infoFileFolders="$backup_folder/$item/backupFolders"
                 infoFileBackup="$backup_folder/$item/backups-$(date +%d-%m-%Y)"
                 infoFileLastBackup="$backup_folder/$item/lastBackup"
                 folderName="$item"
-
+                destinationFolder="$backup_folder/$item/$(date +%d-%m-%Y)"
+                destination="$destinationFolder/$item-$(date +%H-%M-%S).tar"
+                mkdir -p $(dirname $destination)
+                echo "$(date "+%d/%m/%Y ::: %H:%M:%S")" > $destination.time
+                echo "$(date "+%d-%m-%Y")" > $infoFileLastBackup
+                echo "$(date "+%H:%M:%S")" > "$backup_folder/$item/lastTime"
                 mkdir -p $destinationFolder
                 
                 echo "$origin" > "$backup_folder/$item/origin"
@@ -274,15 +279,12 @@ function DoBackup {
                 else
                     echo "$destination" >> $infoFileBackup
                 fi
-
-                echo "$(date "+%d-%m-%Y")" > $infoFileLastBackup
-
                 i=$((i+1))
             ;;
 
             2)
                 maxCopys=$item
-                echo "Backing up: $origin"
+                echo "Backing up   : $origin"
                 if [ ! -e "$origin" ]
                 then
 
@@ -321,12 +323,13 @@ function EraseExtraCopys {
     local folderPath=$backup_folder/$2
     cd $folderPath
     local folderCount=$(wc -l "backupFolders" | cut -d' ' -f 1)
-    echo "Max copys : $maxCopys"
+    echo "Max copys    : $maxCopys"
     if [ $folderCount == 1 ]
     then
         local files
         date=$(cat "backupFolders")
         numberFilesOnFolder=$(wc -l "backups-$date" | cut -d' ' -f 1)
+        echo "Backup Number: $numberFilesOnFolder"
         copysToErase=$(($numberFilesOnFolder-$maxCopys))
         if [ $copysToErase -gt 0 ]
         then
@@ -343,7 +346,6 @@ function EraseExtraCopys {
                     echo "$file" >> "backups-$date"
                 fi
             done
-            echo "Erased    : $erasedCopys old copys"
         fi
     else
         readarray -t folders < "backupFolders"
@@ -393,10 +395,14 @@ function EraseExtraCopys {
                     erasedCopysOnDate[${folders[$dateNumber]}]=0
                 fi
             done
-            echo "Erased    : $erasedCopys old copys"
         fi
     fi
-    
+    if [ -z "$erasedCopys" ]
+    then
+        erasedCopys=0
+    fi
+    echo "Erased       : $erasedCopys old copy/s"
+    echo "Last Backup  : $(cat $folderPath/lastBackup) ::: $(cat $folderPath/lastTime)"
 }
 
 function RestoreFile {
@@ -405,6 +411,7 @@ function RestoreFile {
     rm -rf "$origin"
     mkdir -p $(dirname $origin)
     tar -xf $2 --directory $(dirname $origin)
+    echo "Restored file: $origin"
 }
 
 function Resotore {
@@ -416,31 +423,44 @@ function Resotore {
 
 function ListAllBackups {
     LoadConfig
-    ls $backup_folder
+    echo ""
+    for item in $backup_folder/*/
+    do
+        echo "Backup: $(basename $item)"
+        echo "  Last updated: $(cat $item/lastBackup)  $(cat $item/lastTime)"
+        file=$(tail $item/backups-$(cat $item/lastBackup) --lines=1)
+        echo "      $file"
+        echo "          created at: $(cat $file.time)"
+    done
+    echo ""
 }
 
 function ListBackups {
     LoadConfig
-    if [ -z "$1" ]
+    echo ""
+    folder="$backup_folder/$1"
+    if [ ! -e $folder ]
     then
-        echo "Missing argument, expecting backup name"
-    fi
-    folder=$backup_folder/$1
-    if [ ! -e "$folder" ]
-    then
-        echo "That backup doesn't exist"
+        echo "that backup doesn't exist"
         exit 0
     fi
     readarray -t dates < "$folder/backupFolders"
+    echo "Backups of: $1:"
     for item in ${dates[@]}
     do
-        echo "$item"
+        echo "  On date $item:"
         readarray -t files < "$folder/backups-$item"
         for item2 in ${files[@]}
         do
-            echo "  $(basename $item2)"
+            echo "      File: $item2"
+            echo "          Created at: $(cat $item2.time)"
+            echo ""
         done
     done
+    echo ""
+    echo "Last backup was: $(tail $folder/backups-$(tail $folder/backupFolders --lines=1) --lines=1)"
+    echo "On             : $(cat $folder/lastBackup) :at: $(cat $folder/lastTime)"
+    echo ""
 }
 
 function GetEditor {
