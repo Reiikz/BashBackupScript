@@ -284,6 +284,7 @@ function DoBackup {
 
             2)
                 maxCopys=$item
+                echo ""
                 echo "Backing up   : $origin"
                 if [ ! -e "$origin" ]
                 then
