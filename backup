@@ -264,10 +264,10 @@ function DoBackup {
                 date=$(date "+%d-%m-%Y")
                 if [ ! -e "$infoFileFolders" ]
                 then
-                    echo "$date" > $infoFileFolders
+                    echo "$date" >> $infoFileFolders
                 else
                     alreadyHasIt=$(grep -F "$date" $infoFileFolders)
-                    if [ "$lastBackup" != "$date" ] && [ -z "$alreadyHasIt" ]
+                    if [ -z "$alreadyHasIt" ]
                     then
                         echo "$date" >> $infoFileFolders
                     fi
@@ -342,6 +342,7 @@ function EraseExtraCopys {
                 if [ $erasedCopys -lt $copysToErase ]
                 then
                     rm $file
+                    rm "$file.time"
                     erasedCopys=$(($erasedCopys+1))
                 else
                     echo "$file" >> "backups-$date"
@@ -358,7 +359,7 @@ function EraseExtraCopys {
             numberFilesByDate["$date"]=$number
             totalFiles=$(($number+$totalFiles))
         done
-
+        echo "Backup Number: $totalFiles"
         if [ $totalFiles -gt $maxCopys ]
         then
             copysToErase=$(($totalFiles-$maxCopys))
@@ -380,7 +381,9 @@ function EraseExtraCopys {
                 date=${folders[$dateNumber]}
                 if [ ${erasedCopysOnDate[$date]} -lt ${numberFilesByDate[$date]} ]
                 then
-                    rm ${files[$date,${erasedCopysOnDate[$date]}]}
+                    file=${files[$date,${erasedCopysOnDate[$date]}]}
+                    rm $file
+                    rm "$file.time"
                     grep -v "${files[$date,${erasedCopysOnDate[$date]}]}" "backups-$date" > temp
                     rm "backups-$date"
                     mv "temp" "backups-$date"
@@ -446,6 +449,7 @@ function ListBackups {
         exit 0
     fi
     readarray -t dates < "$folder/backupFolders"
+    echo ${dates[@]}
     echo "Backups of: $1:"
     for item in ${dates[@]}
     do
