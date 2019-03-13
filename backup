@@ -183,7 +183,7 @@ function GetFile {
             file=${files[$number]}
         fi
     else
-        echo "Type de date of the copu you wanna select"
+        echo "Type de date of the copy you wanna select"
         echo -n "   Type the day and press [ENTER]: "
         read day
         echo -n "   Type the month and press [ENTER]: "
