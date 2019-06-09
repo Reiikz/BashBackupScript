@@ -4,7 +4,7 @@ FOLDER="$HOME/.backup"
 CONFIG_FILE="$HOME/.backup/backup.conf"
 DEFAULT_LIST="$HOME/.backup/backup.list"
 DEFAULT_BACKUP_LOCATION="$HOME/.backup/backup"
-INSTALL_PATH=/usr/local/bin/backup
+INSTALL_PATH=/usr/bin
 
 function CheckConfig {
     if [ ! -e $CONFIG_FILE ]
