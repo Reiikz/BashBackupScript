@@ -1,10 +1,26 @@
 #!/bin/bash
-VERSION="1.1.1"
+VERSION="1.2.0"
 FOLDER="$HOME/.backup"
 CONFIG_FILE="$HOME/.backup/backup.conf"
 DEFAULT_LIST="$HOME/.backup/backup.list"
 DEFAULT_BACKUP_LOCATION="$HOME/.backup/backup"
-INSTALL_PATH=/usr/bin
+#INSTALL_PATH=/usr/bin
+
+function PrintInfo {
+    echo "Info : If you just installed this program"
+    echo "          or if it is the first time running it as user $(whoami) please run 'backup -i'."
+    echo "          to setup backup list use 'backup -e',"
+    echo "          to run the backups use 'backup -R',"
+    echo "          to atomatize operations combine with crontab."
+    echo "          for more help 'backup -h' for error reporting: https://github.com/Reiikz/BashBackupScript/issues"
+}
+
+function PrintBackupFolderError {
+    echo "Error: ¿did you just touch the backup folder?"
+    echo "         or ¿is the script working incorrectly? (It could be just empty though)"
+    echo ""
+    PrintInfo
+}
 
 function CheckConfig {
     if [ ! -e $CONFIG_FILE ]
@@ -33,7 +49,6 @@ function LoadConfig {
             exit 0
         fi
         CheckConfig
-        exit 0
     fi
     source $CONFIG_FILE
 }
@@ -49,18 +64,19 @@ function CheckRoot {
     fi
 }
 
-function Install {
-    if [ "$0" == "$INSTALL_PATH" ]
-    then
-        echo "the program is already installed"
-    else
-        CheckRoot
-        echo "$(cat $0)" > $INSTALL_PATH
-        chmod +x $INSTALL_PATH
-    fi
-}
+#function Install {
+#    if [ "$0" == "$INSTALL_PATH" ]
+#    then
+#        echo "the program is already installed"
+#    else
+#        CheckRoot
+#        echo "$(cat $0)" > $INSTALL_PATH
+#        chmod +x $INSTALL_PATH
+#    fi
+#}
 
 function WriteConfigFile {
+    echo "Writing config on: $CONFIG_FILE"
     mkdir -p $DEFAULT_BACKUP_LOCATION
     echo "#where should the backups should be stored?" > $CONFIG_FILE
     echo "backup_folder=$DEFAULT_BACKUP_LOCATION" >> $CONFIG_FILE
@@ -69,23 +85,32 @@ function WriteConfigFile {
     echo "#Where is located the file with the backup list?" >> $CONFIG_FILE
     echo "backup_list=\"$DEFAULT_LIST\"" >> $CONFIG_FILE
     chmod 700 $CONFIG_FILE
+    echo "if no other prompt in between; operation complete!"
 }
 
 function WriteBackupListExample {
+    echo "Writing backup list on: $DEFAULT_LIST"
     mkdir -p $DEFAULT_BACKUP_LOCATION
     echo "invalid" > $DEFAULT_LIST
     echo "this is an example of the backup list" >> $DEFAULT_LIST
     echo "this file should have only the paths and the backup file names" >> $DEFAULT_LIST
     echo "otherwise it'll be invalid" >> $DEFAULT_LIST
-    echo "you have to write the path in the inmediate line the backup file name" >> $DEFAULT_LIST
+    echo "you have to write the name in the inmediate line the backup path" >> $DEFAULT_LIST
     echo "and then the maximum number of stored backups for that path" >> $DEFAULT_LIST
+    echo "there should be no lines in between or extra linejumps 'cause the script will read it as another file" >> $DEFAULT_LIST
+    echo "" >> $DEFAULT_LIST
     echo "like this:" >> $DEFAULT_LIST
+    echo "" >> $DEFAULT_LIST
     echo "/fake/path" >> $DEFAULT_LIST
     echo "fake-file" >> $DEFAULT_LIST
     echo "20" >> $DEFAULT_LIST
     echo "/fake/path2" >> $DEFAULT_LIST
     echo "fake-file-2" >> $DEFAULT_LIST
     echo "25" >> $DEFAULT_LIST
+    echo "/etc/apt" >> $DEFAULT_LIST
+    echo "super_vaca_powers_config_backup" >> $DEFAULT_LIST
+    echo "1000000" >> $DEFAULT_LIST
+    echo "if no other prompt in between; operation complete!"
 }
 
 function PrintHelp {
@@ -104,6 +129,7 @@ function PrintHelp {
     echo "  backup -i                                                                       installs settings files"
     echo "  backup -v                                                                       Version"
     echo "  backup -g <output-path>                                                         returns the backup"
+    echo "  backup -x <output-path>                                                         returns a specific backup"
     echo "  backup -P <output-file>                                                         packages all the backups and config and outputs the file"
     echo "  backup -S <input-file>                                                          imports backups and config"
     echo "  backup -w                                                                       se backup folder"
@@ -119,6 +145,7 @@ function PrintVersion {
     echo "backup command, version $VERSION"
     echo "Copyright (c) 2019"
     echo "License GNU/GPLv3"
+    echo "Source on: https://github.com/Reiikz/BashBackupScript"
 }
 
 function LoadBackupList {
@@ -126,8 +153,9 @@ function LoadBackupList {
     if [ "${PathList[0]}" == "invalid" ]
     then
         echo ""
-        echo "the pathlist file is invalid, please fix it, it is located at ->"
+        echo "the pathlist file is the example one, please fix it, it is located at ->"
         echo "          $backup_list"
+        echo "or you can use backup -e to directly open it"
         exit 0
     fi
 }
@@ -146,6 +174,9 @@ function GetFile {
     if [ ! -e "$folder" ]
     then
         echo "that backup doesn't exist"
+        echo "To list backups and see wich are there and the last update use 'backup -l'"
+        echo "To list all backups for specific file use 'backup -L <backup-name>'"
+        exit 0
     fi
 
     folderCount=$(wc -l $folder/backupFolders | cut -d' ' -f 1)
@@ -430,10 +461,22 @@ function ListAllBackups {
     echo ""
     for item in $backup_folder/*/
     do
+        if [ ! -e $item ]
+        then
+            echo "$item not found"
+            PrintBackupFolderError
+            exit 0
+        fi
         echo "Backup: $(basename $item)"
         echo "  Last updated: $(cat $item/lastBackup)  $(cat $item/lastTime)"
         file=$(tail $item/backups-$(cat $item/lastBackup) --lines=1)
         echo "      $file"
+        if [ ! -e "$file.time" ]
+        then
+            echo "file: $file.time"
+            echo "      containg time at wich the file was created was missing, this could cause errors"
+            PrintBackupFolderError
+        fi
         echo "          created at: $(cat $file.time)"
     done
     echo ""
@@ -457,6 +500,11 @@ function ListBackups {
         readarray -t files < "$folder/backups-$item"
         for item2 in ${files[@]}
         do
+            if [ ! -e "$item2.time" ]
+            then
+                echo "$item2.time  was missing, exiting.."
+                exit 0
+            fi
             echo "      File: $item2"
             echo "          Created at: $(cat $item2.time)"
             echo ""
@@ -725,13 +773,27 @@ function RestoreBackupOfBackup {
 
 }
 
+function ReturnBackup {
+    ListAllBackups
+    echo "please input the backup name you wanna restore"
+    echo -n "then press [ENTER]: "
+    read name
+    GetFile $backup_folder/$name
+    cp $file $1
+}
+
+#If no arguments print info
+if [ $# -eq 0 ]; then
+    PrintInfo
+fi
+
 #get modifiers
 declare b=0
 declare f=0
 declare n=0
 declare temporalS
 declare RUN_R=0
-while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :I :i :D: :P: :S: :w :W :G: :s: :o" o
+while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :i :D: :P: :S: :w :W :G: :s: :o :x:" o
 do
     case "${o}" in
 
@@ -796,10 +858,6 @@ do
             PrintVersion
         ;;
 
-        I)
-            Install
-        ;;
-
         i)
             CheckConfig
         ;;
@@ -835,6 +893,10 @@ do
 
         o)
             RESTORE_OLD_CFG=1
+        ;;
+
+        x)
+            ReturnBackup $OPTARG
         ;;
 
     esac
