@@ -1,9 +1,8 @@
 # BashBackupScript
 A simple and easy to use bash script to automatize your backups
 
-To install it as a command give it run permissions and use the modifier -I like:
-./backup -I
-but, you can use it as it is on whatever location you want
+To install it dump the file named "backup" into "/usr/local/bin" and make it executable, or just install the .deb package I provided in the releases tab.
+anyway, you can use it as it is on whatever location you want.
 use -h to get help like:
 backup -h
 
