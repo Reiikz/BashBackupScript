@@ -1,0 +1,153 @@
+./" this is the man page for bash backup script
+.TH backup "29/08/2019" "V1.3.0" "backup man page"
+
+.SH NAME
+backup - simple easy to use commandline script for managing backups
+
+.SH DESCRIPTION
+this script allows you to create automatic backups in combination with crontab, it comes with many useful features like: 
+    date-time file organization,
+    automatic restoration,
+    individual backup count control,
+    you can even backup your backups or ask the program to return a specific backup.
+This program makes all backups a tar file, so it can be a little cpu intensive.
+
+.SH OPTIONS
+
+.IP -R|--run-backup|--run
+    Search for backup configuration in the backup list file set up in the settings file and then execute them.
+    The backup will be tagged as automatic and will be removed when is too old
+
+.IP -g|--export-backup <out-file.tar> <backupname>
+    Export one of the copys of that backupname
+
+.IP -x|--return-file <out-file.tar>
+    same as --export-backup, but it will print on screen all last backups for all items and ask the user which one of the list
+
+.IP -b|--manual-backup
+    Runs a backup, but you have to specify:
+        the target path with: --target-path <target-path>
+        the destination folder with: --backup-folder <folder-path>
+        the backup name with: --backup-name <backup-name>
+        [optional] the backup count with: --backup-coount <backup-count>
+            (if option is missing will search for config into destination folder, if no config at all will take 50)
+        --default-directory serves as replace to --backup-folder (tells the program to read this parameter from the config file)
+
+.IP -bb|--manual-backup-run
+    same as --manual-backup but the backup will be tagged as manual (the default is allways automatic)
+    manual backups won't be automatically deleted but still count as a slot
+
+.IP -RR|--m-run|--mrun|--manual-run
+    same as --run but the backup will be tagged as manual (the default is allways automatic)
+    manual backups won't be automatically deleted but still count as a slot
+
+.IP -mm|--is-manual
+    Will mark any backup run as manual (the default is automatic)
+    manual backups won't be automatically deleted but still count as a slot
+
+.IP --tag
+    To be used with --run or --manual-backup, it sets a tag for the file, otherwise will be empty
+
+.IP --target-path <path>
+    Indicates the target wich will be backed up, to be used ONLY with --manual-backup
+
+.IP --backup-count <count>
+    Indicates backup max count when used with --manual-backup, can override all backups when used with --run
+
+.IP --backup-name <name>
+    Idicates the name for the backup when used with --manual-backup
+
+.IP --backup-folder <folder-path>
+    Overrides the backup folder when combined with --run or --restore and is required by --manual-backup
+
+.IP -e|--edit-backup-list
+    Opens the backup list with the configured text editor, if none is set, will ask the user to type in the executable,
+    you can type the full path, or just a command like: gedit, nano. The text editor has to support the following usage: executable <file-path>.
+
+.IP -E|--edit-config
+    Opens the backup config with the configured text editor, if none is set, will ask the user to type in the executable,
+    you can type the full path, or just a command like: gedit, nano. The text editor has to support the following usage: executable <file-path>.
+
+.IP --config-file <file-path>
+    Overrides the location for the config file.
+
+.IP --backup-list <file-path>
+    Overrides the location for the backup list.
+
+.IP --default-directory
+    To use with --manual-backup, tells the program to read the backup destination from config file and replaces --backup-folder requirement
+
+.IP --uninstall-folder
+    Erases the default folder which is $HOME/.backup
+
+.IP --install-defaults
+    creates the following default files:
+        $HOME/.backup/backup.conf (config file)
+        $HOME/.backup/backup.list (list file)
+
+.IP -r|--restore <backup-name>
+    Restores a backup, (will promt the user to ask which one)
+
+.IP -h|-H|--help|h|help|HELP|H
+    Prints basic help
+
+.IP -d|--delete-backup <backup-name>
+    Deletes all backups
+
+.IP -D|--delete-backup-file <backup-name>
+    Deletes a backed up file, asks the user which one
+
+.IP -P|--export-backups <output-file>
+    Exports all your backup folder and config to be imported into another machine
+
+.IP -S|--import-backups <input-file>
+    Imports all your backups and config
+
+.IP -G|--export-specific
+    Exports a backup of all the backups for one of the names you've backed up
+
+.IP -s|--import-specific
+    Imports a backup of all the backups for one of the names you've backed up
+
+.IP -o|--also-config
+    To be used with --import-specific, this means that also the information that was on the backup list will be imported, the default is not
+
+.IP -w|--browse-backup-folder
+    Will open up the folder containing all backup items whith the set up file explorer
+
+.IP -W|--see-backup-folder
+    Will spit out the backup folder location
+
+.IP -v|--version
+    Prompts the version
+
+.SH SYNOPSIS
+to install basic files on your home directory use backup --install-defaults
+to edit backup list use backup -e
+    Note that the order has to be respected as pointed in the file and it has to be continuous (no extra lines), this is due to inner workings.
+to run your backups use backup -R
+to restore them use backup -r
+the program is pretty verbose you should be fine.
+
+.SH BACKUP LIST EXPLANATION
+The backup list file should contain all the necesary information to run a backup.
+The first line should be the backup name, then the path of that backup, then the max number of copys that will be stored, then repeat.
+There should be no empty lines on this file, 'cause the script will read it as data, no comments are permitted either.
+
+.SH BACKUP LIST EXAMPLE
+
+.IP apt
+    apt
+    /etc/apt
+    100
+
+.IP apt/postfix
+    apt
+    /etc/apt
+    100
+    postfix
+    /etc/postfix
+    20
+
+.SH AUTHOR
+    https://github.com/reiikz/

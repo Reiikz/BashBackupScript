@@ -1,18 +1,22 @@
 #!/bin/bash
-VERSION="1.2.0"
+
+VERSION="1.3.0"
 FOLDER="$HOME/.backup"
 CONFIG_FILE="$HOME/.backup/backup.conf"
 DEFAULT_LIST="$HOME/.backup/backup.list"
 DEFAULT_BACKUP_LOCATION="$HOME/.backup/backup"
-#INSTALL_PATH=/usr/bin
+DEFAULT_BACKUP_COUNT=50
+PROGNAME="$(basename $0)"
+MYSELF="$(realpath $0)"
+BACKUP_MODE="AUTOMATIC"
 
 function PrintInfo {
     echo "Info : If you just installed this program"
-    echo "          or if it is the first time running it as user $(whoami) please run 'backup -i'."
-    echo "          to setup backup list use 'backup -e',"
-    echo "          to run the backups use 'backup -R',"
+    echo "          or if it is the first time running it as user $(whoami) please run '$folderName --install-defaults'."
+    echo "          to setup backup list use '$PROGNAME -e',"
+    echo "          to run the backups use '$PROGNAME -R',"
     echo "          to atomatize operations combine with crontab."
-    echo "          for more help 'backup -h' for error reporting: https://github.com/Reiikz/BashBackupScript/issues"
+    echo "          for more help '$PROGNAME -h' for error reporting: https://github.com/Reiikz/BashBackupScript/issues"
 }
 
 function PrintBackupFolderError {
@@ -25,18 +29,23 @@ function PrintBackupFolderError {
 function CheckConfig {
     if [ ! -e $CONFIG_FILE ]
     then
-        mkdir -p $DEFAULT_BACKUP_LOCATION
+        mkdir -p $(dirname $CONFIG_FILE)
         WriteConfigFile
     fi
     LoadConfig
     configChecked=1
     if [ ! -e $backup_list ]
     then
+        mkdir -p $(dirname $backup_list)
         WriteBackupListExample
     fi
     user=$(whoami)
-    chown $user:$user -R $FOLDER
-    chmod 700 -R $FOLDER >/dev/null 2>&1
+    #chown $user:$user -R $backup_folder
+    #chmod 700 -R $backup_folder >/dev/null 2>&1
+    #chown $user:$user -R $(dirname $CONFIG_FILE)
+    #chmod 700 -R $(dirname $CONFIG_FILE) >/dev/null 2>&1
+    #chown $user:$user -R $(dirname $backup_list)
+    #chmod 700 -R $(dirname $backup_list) >/dev/null 2>&1
 }
 
 function LoadConfig {
@@ -51,6 +60,12 @@ function LoadConfig {
         CheckConfig
     fi
     source $CONFIG_FILE
+    if [ ! -z $MB_BACKUP_LIST ]; then
+        backup_list=$DEFAULT_LIST
+    fi
+    if [ ! -z $MB_FOLDER ]; then 
+        backup_folder=$MB_FOLDER
+    fi
 }
 
 function CheckRoot {
@@ -63,17 +78,6 @@ function CheckRoot {
         fi
     fi
 }
-
-#function Install {
-#    if [ "$0" == "$INSTALL_PATH" ]
-#    then
-#        echo "the program is already installed"
-#    else
-#        CheckRoot
-#        echo "$(cat $0)" > $INSTALL_PATH
-#        chmod +x $INSTALL_PATH
-#    fi
-#}
 
 function WriteConfigFile {
     echo "Writing config on: $CONFIG_FILE"
@@ -95,54 +99,51 @@ function WriteBackupListExample {
     echo "this is an example of the backup list" >> $DEFAULT_LIST
     echo "this file should have only the paths and the backup file names" >> $DEFAULT_LIST
     echo "otherwise it'll be invalid" >> $DEFAULT_LIST
-    echo "you have to write the name in the inmediate line the backup path" >> $DEFAULT_LIST
+    echo "you have to write the path in the inmediate line the backup name" >> $DEFAULT_LIST
     echo "and then the maximum number of stored backups for that path" >> $DEFAULT_LIST
     echo "there should be no lines in between or extra linejumps 'cause the script will read it as another file" >> $DEFAULT_LIST
     echo "" >> $DEFAULT_LIST
     echo "like this:" >> $DEFAULT_LIST
     echo "" >> $DEFAULT_LIST
-    echo "/fake/path" >> $DEFAULT_LIST
     echo "fake-file" >> $DEFAULT_LIST
+    echo "/fake/path" >> $DEFAULT_LIST
     echo "20" >> $DEFAULT_LIST
-    echo "/fake/path2" >> $DEFAULT_LIST
     echo "fake-file-2" >> $DEFAULT_LIST
+    echo "/fake/path2" >> $DEFAULT_LIST
     echo "25" >> $DEFAULT_LIST
-    echo "/etc/apt" >> $DEFAULT_LIST
     echo "super_vaca_powers_config_backup" >> $DEFAULT_LIST
+    echo "/etc/apt" >> $DEFAULT_LIST
     echo "1000000" >> $DEFAULT_LIST
     echo "if no other prompt in between; operation complete!"
 }
 
 function PrintHelp {
     echo "Usage:"
-    echo "  sudo ./backup -I                                                                installs the program"
-    echo "  backup -R                                                                       run the configured backups"
-    echo "  backup -b <backup-name> -f <file-path> [OPTIONAL]-n <max-copys>                 backs up a file for you"
-    echo "  backup -r <backup-name>                                                         restore a backup"
-    echo "  backup -l                                                                       lists all backups"
-    echo "  backup -L <backup-name>                                                         lists all storedes versions"
-    echo "  backup -d <backup-name>                                                         remove all backups"
-    echo "  backup -D <backup-name>                                                         delete specific backup file"
-    echo "  backup -c                                                                       cleans up all the data (erases everything)"
-    echo "  backup -e                                                                       edit the list"
-    echo "  backup -E                                                                       edit settings"
-    echo "  backup -i                                                                       installs settings files"
-    echo "  backup -v                                                                       Version"
-    echo "  backup -g <output-path>                                                         returns the backup"
-    echo "  backup -x <output-path>                                                         returns a specific backup"
-    echo "  backup -P <output-file>                                                         packages all the backups and config and outputs the file"
-    echo "  backup -S <input-file>                                                          imports backups and config"
-    echo "  backup -w                                                                       se backup folder"
-    echo "  backup -W                                                                       prints the backup folder location"
-    echo "  backup -G <output-file>                                                         outputs a backup of all your backups for specific origin"
-    echo "  backup -s <input-file>                                                          restores a backup all your backups for specific"
-    echo "  backup -o also restores the configuration for that backup when combined with -s"
-    echo "(you can combine -g <output-path> with -R or with -b <backup-name> -f <file-path>)"
+    echo "  $PROGNAME -R                                                                       run the configured backups"
+    echo "  $PROGNAME -b <backup-name> -f <file-path> [OPTIONAL]-n <max-copys>                 backs up a file for you"
+    echo "  $PROGNAME -r <backup-name>                                                         restore a backup"
+    echo "  $PROGNAME -l                                                                       lists all backups"
+    echo "  $PROGNAME -L <backup-name>                                                         lists all storedes versions"
+    echo "  $PROGNAME -d <backup-name>                                                         remove all backups"
+    echo "  $PROGNAME -D <backup-name>                                                         delete specific backup file"
+    echo "  $PROGNAME -e                                                                       edit the list"
+    echo "  $PROGNAME -E                                                                       edit settings"
+    echo "  $PROGNAME -v                                                                       Version"
+    echo "  $PROGNAME -g <output-path> <backup-name>                                           returns the backup"
+    echo "  $PROGNAME -x <output-path>                                                         returns a specific backup"
+    echo "  $PROGNAME -P <output-file>                                                         packages all the backups and config and outputs the file"
+    echo "  $PROGNAME -S <input-file>                                                          imports backups and config"
+    echo "  $PROGNAME -w                                                                       se backup folder"
+    echo "  $PROGNAME -W                                                                       prints the backup folder location"
+    echo "  $PROGNAME -G <output-file>                                                         outputs a backup of all your backups for specific origin"
+    echo "  $PROGNAME -s <input-file>                                                          restores a backup all your backups for specific"
+    echo "  $PROGNAME -o also restores the configuration for that backup when combined with -s"
     echo "Is recomended the use of absolute paths"
+    echo "for more info use man $PROGNAME"
 }
 
 function PrintVersion {
-    echo "backup command, version $VERSION"
+    echo "$PROGNAME command, version $VERSION"
     echo "Copyright (c) 2019"
     echo "License GNU/GPLv3"
     echo "Source on: https://github.com/Reiikz/BashBackupScript"
@@ -153,29 +154,26 @@ function LoadBackupList {
     if [ "${PathList[0]}" == "invalid" ]
     then
         echo ""
-        echo "the pathlist file is the example one, please fix it, it is located at ->"
+        echo "the path list file is the example one, please fix it, it is located at ->"
         echo "          $backup_list"
-        echo "or you can use backup -e to directly open it"
+        echo "or you can use $PROGNAME -e to directly open it"
+        echo ""
         exit 0
     fi
 }
 
 function LoadBackupCfg {
     CheckConfig
-    if [ -z "$RUN_UNSTORED_BACKUP" ]
-    then
-        LoadBackupList
-    fi
-    LoadConfig
+    LoadBackupList
 }
 
 function GetFile {
     folder=$1
     if [ ! -e "$folder" ]
     then
-        echo "that backup doesn't exist"
-        echo "To list backups and see wich are there and the last update use 'backup -l'"
-        echo "To list all backups for specific file use 'backup -L <backup-name>'"
+        echo "the backup $1 doesn't exist"
+        echo "To list backups and see wich are there and the last update use '$PROGNAME -l'"
+        echo "To list all backups for specific file use '$PROGNAME -L <backup-name>'"
         exit 0
     fi
 
@@ -267,24 +265,33 @@ function DoBackup {
         case $i in
 
             0)
-                origin="$item"
+                folderName="$item"
                 i=$((i+1))
             ;;
 
             1)
-                infoFileFolders="$backup_folder/$item/backupFolders"
-                infoFileBackup="$backup_folder/$item/backups-$(date +%d-%m-%Y)"
-                infoFileLastBackup="$backup_folder/$item/lastBackup"
-                folderName="$item"
-                destinationFolder="$backup_folder/$item/$(date +%d-%m-%Y)"
-                destination="$destinationFolder/$item-$(date +%H-%M-%S).tar"
+                origin="$item"
+                i=$((i+1))
+
+                if [ ! -e "$backup_folder/$folderName" ]; then
+                    mkdir -p "$backup_folder/$folderName"
+                fi
+
+                infoFileFolders="$backup_folder/$folderName/backupFolders"
+                infoFileBackup="$backup_folder/$folderName/backups-$(date +%d-%m-%Y)"
+                infoFileLastBackup="$backup_folder/$folderName/lastBackup"
+                destinationFolder="$backup_folder/$folderName/$(date +%d-%m-%Y)"
+                destination="$destinationFolder/$folderName-$(date +%H-%M-%S).tar"
                 mkdir -p $(dirname $destination)
+                echo "$BACKUP_MODE" > "$backup_folder/$folderName/backupMode"
                 echo "$(date "+%d/%m/%Y ::: %H:%M:%S")" > $destination.time
+                echo "$BACKUP_TAG" > $destination.tag
+                echo "$BACKUP_MODE" > $destination.mode
                 echo "$(date "+%d-%m-%Y")" > $infoFileLastBackup
-                echo "$(date "+%H:%M:%S")" > "$backup_folder/$item/lastTime"
+                echo "$(date "+%H:%M:%S")" > "$backup_folder/$folderName/lastTime"
                 mkdir -p $destinationFolder
                 
-                echo "$origin" > "$backup_folder/$item/origin"
+                echo "$origin" > "$backup_folder/$folderName/origin"
                                 
                 lastBackup=""
                 if [ -e "$infoFileLastBackup" ]
@@ -310,13 +317,13 @@ function DoBackup {
                 else
                     echo "$destination" >> $infoFileBackup
                 fi
-                i=$((i+1))
             ;;
 
             2)
                 maxCopys=$item
                 echo ""
-                echo "Backing up   : $origin"
+                echo "Backing up   : $folderName"
+                echo "path         : $origin"
                 if [ ! -e "$origin" ]
                 then
 
@@ -370,10 +377,11 @@ function EraseExtraCopys {
             rm "backups-$date"
             for file in ${files[@]}
             do
-                if [ $erasedCopys -lt $copysToErase ]
+                filemode="$(cat $file.mode)"
+                if [ $erasedCopys -lt $copysToErase ] && [ "$filemode" == "AUTOMATIC" ]
                 then
                     rm $file
-                    rm "$file.time"
+                    rm $file.*
                     erasedCopys=$(($erasedCopys+1))
                 else
                     echo "$file" >> "backups-$date"
@@ -413,19 +421,28 @@ function EraseExtraCopys {
                 if [ ${erasedCopysOnDate[$date]} -lt ${numberFilesByDate[$date]} ]
                 then
                     file=${files[$date,${erasedCopysOnDate[$date]}]}
-                    rm $file
-                    rm "$file.time"
-                    grep -v "${files[$date,${erasedCopysOnDate[$date]}]}" "backups-$date" > temp
-                    rm "backups-$date"
-                    mv "temp" "backups-$date"
+                    filemode="$(cat $file.mode)"
+                    if [ "$filemode" == "AUTOMATIC" ]; then
+                        rm $file
+                        rm $file.*
+                        grep -v "${files[$date,${erasedCopysOnDate[$date]}]}" "backups-$date" > temp
+                        rm "backups-$date"
+                        mv "temp" "backups-$date"
+                        erasedCopys=$(($erasedCopys+1))
+                    else
+                        DATEHASMANUALRUN=1
+                    fi
                     erasedCopysOnDate[${folders[$dateNumber]}]=$((${erasedCopysOnDate[$date]}+1))
-                    erasedCopys=$(($erasedCopys+1))
                 else
-                    rmdir $date
-                    rm "backups-$date"
-                    grep -v "$date" "backupFolders" > temp
-                    rm "backupFolders"
-                    mv "temp" "backupFolders"
+                    if [ -z $DATEHASMANUALRUN ]; then
+                        rmdir $date
+                        rm "backups-$date"
+                        grep -v "$date" "backupFolders" > temp
+                        rm "backupFolders"
+                        mv "temp" "backupFolders"
+                    else
+                        unset DATEHASMANUALRUN
+                    fi
                     dateNumber=$(($dateNumber+1))
                     erasedCopysOnDate[${folders[$dateNumber]}]=0
                 fi
@@ -438,6 +455,9 @@ function EraseExtraCopys {
     fi
     echo "Erased       : $erasedCopys old copy/s"
     echo "Last Backup  : $(cat $folderPath/lastBackup) ::: $(cat $folderPath/lastTime)"
+    echo "TAG:         : $BACKUP_TAG"
+    echo "MODE:        : $BACKUP_MODE"
+    echo ""
 }
 
 function RestoreFile {
@@ -450,7 +470,11 @@ function RestoreFile {
 }
 
 function Resotore {
-    LoadConfig
+    if [ -z $MB_FOLDER ]; then
+        LoadConfig
+    else
+        backup_folder=$MB_FOLDER
+    fi
     folder="$backup_folder/$1"
     GetFile $folder
     RestoreFile $folder $file
@@ -468,7 +492,7 @@ function ListAllBackups {
             exit 0
         fi
         echo "Backup: $(basename $item)"
-        echo "  Last updated: $(cat $item/lastBackup)  $(cat $item/lastTime)"
+        #echo "  Last updated: $(cat $item/lastBackup)  $(cat $item/lastTime)"
         file=$(tail $item/backups-$(cat $item/lastBackup) --lines=1)
         echo "      $file"
         if [ ! -e "$file.time" ]
@@ -477,7 +501,15 @@ function ListAllBackups {
             echo "      containg time at wich the file was created was missing, this could cause errors"
             PrintBackupFolderError
         fi
+        if [ ! -e "$file.tag" ]
+        then
+            echo "file: $file.tag"
+            echo "      containg tag with wich the file was created was missing"
+            PrintBackupFolderError
+        fi
         echo "          created at: $(cat $file.time)"
+        echo "          tag       : $(cat $file.tag)"
+        echo "          mode      : $(cat $file.mode)"
     done
     echo ""
 }
@@ -507,6 +539,8 @@ function ListBackups {
             fi
             echo "      File: $item2"
             echo "          Created at: $(cat $item2.time)"
+            echo "          tag       : $(cat $item2.tag)"
+            echo "          mode      : $(cat $item2.mode)"
             echo ""
         done
     done
@@ -569,36 +603,6 @@ function RemoveBackup {
     fi
 }
 
-function RemoveAllData {
-    chmod 700 -R $FOLDER >/dev/null 2>&1
-    LoadConfig >/dev/null 2>&1
-    echo "are you sure you want to DELETE ALL YOUR BACKUPS?"
-    echo -n "[YES I'M FUCKING SHURE, SHUT UP AND OBEY ME/n]: "
-    read response
-    if [ "$response" == "YES I'M FUCKING SHURE, SHUT UP AND OBEY ME" ]
-    then
-        echo "are you realy realy sure 100%?"
-        echo -n "[SHUT UP ALREADY/n]: "
-        read response
-        if [ "$response" == "SHUT UP ALREADY" ]
-        then
-            rm -rf $backup_folder
-            echo -n "and settings too? [YES/n]: "
-            read response
-            if [ "$response" == "YES" ]
-            then
-                WriteConfigFile
-                WriteBackupListExample
-                echo "sadly, all your data just went bye bye"
-            else
-                echo "sadly, all your backups just went bye bye"
-            fi
-        fi
-    else
-        echo "this time you realy scared me dude"
-    fi
-}
-
 function DeleteSpecificBackup {
     LoadConfig
     folder="$backup_folder/$1"
@@ -610,7 +614,7 @@ function DeleteSpecificBackup {
     GetFile $folder
     echo "Are you sure you wanna delete the folloing backup?:"
     echo "          $file"
-    echo -n "[YEy/nO]: "
+    echo -n "[YES/n]: "
     read response
     if [ "$response" == "YES" ]
     then
@@ -782,170 +786,442 @@ function ReturnBackup {
     cp $file $1
 }
 
-#If no arguments print info
-if [ $# -eq 0 ]; then
-    PrintInfo
-fi
-
-#get modifiers
-declare b=0
-declare f=0
-declare n=0
-declare temporalS
-declare RUN_R=0
-while getopts ":g: :R :b: :f: :n: :r: :L: :l :h :H :e :E :d: :c :v :i :D: :P: :S: :w :W :G: :s: :o :x:" o
-do
-    case "${o}" in
-
-        g)
-            GetBackup="$OPTARG"
-        ;;
-
-        R)
-            RUN_R=1
-        ;;
-
-        b)
-            RUN_UNSTORED_BACKUP=true
-            temporalS[0]="$OPTARG"
-            b=1
-        ;;
-
-        f)
-            temporalS[1]="$OPTARG"
-            inputFile="$OPTARG"
-            f=1
-        ;;
-
-        n)
-            temporalS[3]="$OPTARG"
-            n=1
-        ;;
-
-        r)
-            Resotore "$OPTARG"
-        ;;
-
-        l)
-            ListAllBackups
-        ;;
-
-        L)
-            ListBackups "$OPTARG"
-        ;;
-
-        e)
-            EditList
-        ;;
-
-        E)
-            EditConfig
-        ;;
-
-        h|H)
-            PrintHelp
-        ;;
-
-        d)
-            RemoveBackup "$OPTARG"
-        ;;
-
-        c)
-            RemoveAllData
-        ;;
-
-        v)
-            PrintVersion
-        ;;
-
-        i)
-            CheckConfig
-        ;;
-
-        D)
-            DeleteSpecificBackup "$OPTARG"
-        ;;
-
-        P)
-            ExportAll "$OPTARG"
-        ;;
-
-        S)
-            ImportAll "$OPTARG"
-        ;;
-
-        w)
-            OpenBackupFolder
-        ;;
-
-        W)
-            LoadConfig
-            echo "$backup_folder"
-        ;;
-
-        G)
-            SaveBackupOfBuckups "$OPTARG"
-        ;;
-
-        s)
-            RESTORE_BACKUP_OF_BACKUP="$OPTARG"
-        ;;
-
-        o)
-            RESTORE_OLD_CFG=1
-        ;;
-
-        x)
-            ReturnBackup $OPTARG
-        ;;
-
-    esac
-done
-
-if [ ! -z "$RESTORE_BACKUP_OF_BACKUP" ]
-then
-    RestoreBackupOfBackup $RESTORE_BACKUP_OF_BACKUP
-fi
-
-if [ $RUN_R == 1 ]
-then
-    LoadBackupCfg
-    DoBackup
-    exit 0
-fi
-
-if [ ! -z "$RUN_UNSTORED_BACKUP" ]
-then
-
-    if ([ $b == 0 ] || [ $f == 0 ]) && !([ $b == 1 ] && [ $f == 1 ])
-    then
-        echo "Missing arguments"
+function CheckFirstArgument {
+    if [ "$notFirst" != "" ]; then
         echo ""
-        PrintHelp
-        exit 0
+        echo "Operation argument must be the first one"
+        echo ""
+        exit 1
     fi
+}
 
-    if [ $b ]
-    then
-        LoadConfig
-        if [ $n == 1 ]
-        then
-            PathList=("${temporalS[1]}" "${temporalS[0]}" "${temporalS[3]}")
-        else
-            PathList=("${temporalS[1]}" "${temporalS[0]}" "20")
-        fi
-        DoBackup
-    fi
-    exit 0
-fi
-
-if [ ! -z "$GetBackup" ]
-then
+function GetBackup {
     LoadConfig
-    echo -n "Type the name of the backup and press [ENTER]: "
-    read name
+    if [ "$2" != "" ]; then
+        name=$2
+    else
+        echo -n "Type the name of the backup and press [ENTER]: "
+        read name
+    fi
     folder=$backup_folder/$name
     echo "$folder"
     GetFile $folder
-    cp $file $GetBackup
+    cp $file $1
+}
+
+function ValidateDirectory {
+    if [ ! -e $1 ]; then
+        mkdir -p $1
+    fi
+    if [ ! -d $1 ]; then
+        echo "provided path is already exists and is not directory"
+    fi
+}
+
+function ManualBackup {
+    if [ -z $MB_NAME ]; then
+            echo "required --backup-name when running --manual-backup"
+            exit 1
+        fi
+
+        if [ -z $DEFAULT_DIRECTORY ] && [ -z $MB_FOLDER ]; then
+            echo "required --backup-folder or --default-directory when running --manual-backup"
+            exit 1
+        fi
+        
+        ValidateDirectory $MB_FOLDER
+        if [ -z $MB_COUNT ]; then
+            if [ ! -z $DEFAULT_DIRECTORY ]; then
+                LoadBackupCfg
+                i=0
+                for item in ${PathList[@]}; do
+                    if [ "$item" == "$MB_NAME" ]; then
+                        i=$(($i+2))
+                        MB_COUNT=${PathList[$i]}
+                        FOUND_BACKUP=1
+                        break
+                    fi
+                    i=$(($i+1))
+                done
+                if [ -z $FOUND_BACKUP ]; then
+                    MB_COUNT=$DEFAULT_BACKUP_COUNT
+                fi
+                unset PathList
+            else
+                MB_COUNT=$DEFAULT_BACKUP_COUNT
+            fi
+        fi
+
+        if [ ! -z $DEFAULT_DIRECTORY ]; then
+            LoadConfig
+        else
+            backup_folder=$MB_FOLDER
+        fi
+        declare -a PathList=("$MB_NAME" "$MB_TARGET" "$MB_COUNT")
+        DoBackup
+}
+
+if [ $# -eq 0 ]; then
+    PrintInfo
+    exit 0
 fi
+
+operation=""
+while [ "$1" != "" ]; do
+    
+    case $1 in
+        -g|--export-backup)
+            CheckFirstArgument
+            operation="GetBackup"
+            shift
+            if [ "$1" == "" ]; then
+                echo "missing argument, must be <filename.tar> <backupname>"
+                exit 1
+            else
+                data=$1
+            fi
+            shift
+            if [ "$1" == "" ]; then
+                echo "missing argument, must be <filename.tar> <backupname>"
+                exit 1
+            else
+                data="$data $1"
+            fi
+        ;;
+
+        -R|--run-backup|--run)
+            BACKUP_MODE="AUTOMATIC"
+            CheckFirstArgument
+            operation="DoBackup"
+        ;;
+
+        -RR|--m-run|--mrun|--manual-run)
+            BACKUP_MODE="MANUAL"
+            CheckFirstArgument
+            operation="DoBackup"
+        ;;
+
+        -b|--manual-backup)
+            CheckFirstArgument
+            operation="ManualBackup"
+        ;;
+        
+        -bb|--manual-backup-run)
+            CheckFirstArgument
+            operation="ManualBackup"
+        ;;
+
+        -mm|--is-manual)
+            BACKUP_MODE="MANUAL"
+        ;;
+
+        --target-path)
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME [options] --target-path <target-file/folder>"
+                exit 1
+            fi
+            MB_TARGET=$1
+        ;;
+        
+        --backup-count)
+            shift
+            if [ "$1" == "" ]; then
+                MB_COUNT=DEFAULT_BACKUP_COUNT
+            else
+                MB_COUNT=$1
+            fi
+        ;;
+
+        --backup-name)
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME [options] --backup-name <backup name>"
+                exit 1
+            fi
+            MB_NAME=$1
+        ;;
+
+        -e|--edit-backup-list)
+            operation="EditList"
+        ;;
+
+        --config-file)
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME [options] --config-file <config-file-full-path>"
+                exit 1
+            fi
+            CONFIG_FILE=$1
+            if [ ! -e "$1" ]; then
+                echo -n "Supplied config file doesn't exist ¿create it? [Y/N]"
+                read opt
+                if [ "$opt" == "y" ] || [ "$opt" == "y" ]; then
+                    WriteConfigFile
+                else
+                    exit 0
+                fi
+            fi
+        ;;
+
+        --backup-list)
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME [options] --backup-list <list-full-path>"
+                exit 1
+            fi
+            MB_BACKUP_LIST=1
+            DEFAULT_LIST=$1
+            backup_list=$1
+            if [ ! -e "$1" ]; then
+                WriteBackupListExample
+            fi
+        ;;
+
+        --backup-folder)
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME [options] --backup-folder <backup-folder-full-path>"
+                exit 1
+            fi
+            if [ -e "$1" ] && [ ! -d "$1" ]; then
+                echo "already exists and is a file"
+                exit 1
+            fi
+            DEFAULT_BACKUP_LOCATION=$1
+            backup_folder=$1
+            MB_FOLDER=$1
+        ;;
+
+        --default-directory)
+            DEFAULT_DIRECTORY=1
+        ;;
+
+        --uninstall-folder)
+            CheckFirstArgument
+            echo "About to erase $FOLDER"
+            echo -n "[YES I'M FUCKING SHURE/No]: "
+            read opt
+            if [ "$opt" == "YES I'M FUCKING SHURE" ]; then
+                echo -n "erase folder? [Y/N]: "
+                read opt
+                if [ "$opt" == "Y" ] || [ "$opt" == "y" ]; then
+                    rm -rf $FOLDER
+                fi
+            fi
+            exit 0
+        ;;
+
+        --install-defaults)
+            CheckFirstArgument
+            CheckConfig
+            exit 0
+        ;;
+
+        -r|--restore)
+            CheckFirstArgument
+            operation="Resotore"
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <backup-name>"
+                ListAllBackups
+                exit 1
+            fi
+            data=$1
+        ;;
+
+        -l|--list-all-backups)
+            CheckFirstArgument
+            operation="ListAllBackups"
+        ;;
+
+        -L|--list-backups)
+            CheckFirstArgument
+            operation="ListBackups"
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <backup-name>"
+                ListAllBackups
+                exit 1
+            fi
+            data=$1
+        ;;
+
+        -E|--edit-config)
+            CheckFirstArgument
+            operation="EditConfig"
+        ;;
+
+        -h|-H|--help|h|help|HELP|H)
+            CheckFirstArgument
+            operation="PrintHelp"
+        ;;
+
+        -d|--delete-backup)
+            CheckFirstArgument
+            operation="RemoveBackup"
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <backup-name>"
+                ListAllBackups
+                exit 1
+            fi
+            data=$1
+        ;;
+
+        -v|--version)
+            CheckFirstArgument
+            operation="PrintVersion"
+        ;;
+
+        -D|--delete-backup-file)
+            CheckFirstArgument
+            operation="DeleteSpecificBackup"
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <backup-name>"
+                ListAllBackups
+                exit 1
+            fi
+            data=$1
+        ;;
+
+        -P|--export-backups)
+            CheckFirstArgument
+            operation="ExportAll"
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <output-file>"
+                exit 1
+            fi
+            data=$1
+        ;;
+
+        -S|--import-backups)
+            CheckFirstArgument
+            operation="ImportAll"
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <input-file>"
+                exit 1
+            fi
+            data=$1
+        ;;
+
+        -w|--browse-backup-folder)
+            CheckFirstArgument
+            operation="OpenBackupFolder"
+        ;;
+
+        -W|--see-backup-folder)
+            CheckFirstArgument
+            operation="SeeBackupFolder"
+        ;;
+
+        -G|--export-specific)
+            CheckFirstArgument
+            operation="SaveBackupOfBuckups"
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <output-file>"
+                exit 1
+            fi
+            data=$1
+        ;;
+
+        -s|--import-specific)
+            CheckFirstArgument
+            operation="RestoreBackupOfBackup"
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <input-file>"
+                exit 1
+            fi
+            data=$1
+        ;;
+
+        -o|--also-config)
+            RESTORE_OLD_CFG=1
+        ;;
+
+        -t|--tag)
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <\"tag\">"
+                exit 1
+            fi
+            BACKUP_TAG=$1
+        ;;
+
+        -x|--return-file)
+            CheckFirstArgument
+            operation="ReturnBackup"
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <output-file>"
+                exit 1
+            fi
+            data=$1
+        ;;
+
+        *)
+            echo "$1 not recognized option backup -h for help"
+            echo 
+            PrintInfo
+            exit 0
+        ;;
+    esac
+    shift
+    notFirst=1
+done
+
+case $operation in
+    
+    ManualBackup)
+        ManualBackup
+        exit 0
+    ;;
+
+    DoBackup)
+        LoadBackupCfg
+        if [ ! -z $MB_FOLDER ]; then
+            echo "WARNING: BACKUP FOLDER OVERRIDEN, OUTPUT TO-> $MB_FOLDER"
+            backup_folder=$MB_FOLDER
+        fi
+        i=0
+        c=0
+        if [ ! -z $MB_COUNT ]; then
+            echo "WARNING: BACKUP COUNT OVERRIDEN"
+            for item in ${PathList[@]}; do
+                if [ $i -eq 2 ]; then
+                    i=0
+                    PathList[$c]=$MB_COUNT
+                fi
+                c=$(($c+1))
+                i=$(($i+1))
+            done
+        fi
+        DoBackup
+        exit 0
+    ;;
+
+    SeeBackupFolder)
+        LoadConfig
+        echo "$backup_folder"
+    ;;
+
+    *)
+        $operation $data
+        exit 0
+    ;;
+esac
