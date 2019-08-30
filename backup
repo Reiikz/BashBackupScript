@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="1.3.0"
+VERSION="1.3.1"
 FOLDER="$HOME/.backup"
 CONFIG_FILE="$HOME/.backup/backup.conf"
 DEFAULT_LIST="$HOME/.backup/backup.list"
@@ -193,6 +193,8 @@ function GetFile {
             do
                 echo "   File #$i: $item"
                 echo "      created at: $(cat $item.time)"
+		echo "      tag       : $(cat $item.tag)"
+		echo "      MODE      : $(cat $item.mode)"
                 echo ""
                 i=$(($i+1))
             done
