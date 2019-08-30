@@ -238,6 +238,9 @@ function GetFile {
             for item in ${files[@]}
             do
                 echo "   File #$i: $item"
+		echo "      created at: $(cat $item.time)"
+		echo "      tag       : $(cat $item.tag)"
+		echo "      MODE      : $(cat $item.mode)"
                 i=$(($i+1))
             done
             echo "Type the number of the file you wanna select"
