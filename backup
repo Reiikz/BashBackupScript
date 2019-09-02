@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="1.3.1"
+VERSION="1.4.0"
 FOLDER="$HOME/.backup"
 CONFIG_FILE="$HOME/.backup/backup.conf"
 DEFAULT_LIST="$HOME/.backup/backup.list"
@@ -16,7 +16,8 @@ function PrintInfo {
     echo "          to setup backup list use '$PROGNAME -e',"
     echo "          to run the backups use '$PROGNAME -R',"
     echo "          to atomatize operations combine with crontab."
-    echo "          for more help '$PROGNAME -h' for error reporting: https://github.com/Reiikz/BashBackupScript/issues"
+    echo "          for more help '$PROGNAME -h' also consider RFM aka \"man $PROGNAME\""
+    echo "          for error reporting: https://github.com/Reiikz/BashBackupScript/issues"
 }
 
 function PrintBackupFolderError {
@@ -27,37 +28,33 @@ function PrintBackupFolderError {
 }
 
 function CheckConfig {
-    if [ ! -e $CONFIG_FILE ]
-    then
-        mkdir -p $(dirname $CONFIG_FILE)
-        WriteConfigFile
+    if [ "$operation" != "ManualBackup" ]; then
+        if [ ! -e $CONFIG_FILE ]
+        then
+            mkdir -p $(dirname $CONFIG_FILE)
+            WriteConfigFile
+        fi
+        LoadConfig
+        configChecked=1
+        if [ ! -e $backup_list ]
+        then
+            mkdir -p $(dirname $backup_list)
+            WriteBackupListExample
+        fi
+        user=$(whoami)
     fi
-    LoadConfig
-    configChecked=1
-    if [ ! -e $backup_list ]
-    then
-        mkdir -p $(dirname $backup_list)
-        WriteBackupListExample
-    fi
-    user=$(whoami)
-    #chown $user:$user -R $backup_folder
-    #chmod 700 -R $backup_folder >/dev/null 2>&1
-    #chown $user:$user -R $(dirname $CONFIG_FILE)
-    #chmod 700 -R $(dirname $CONFIG_FILE) >/dev/null 2>&1
-    #chown $user:$user -R $(dirname $backup_list)
-    #chmod 700 -R $(dirname $backup_list) >/dev/null 2>&1
 }
 
 function LoadConfig {
     if [ ! -e $CONFIG_FILE ]
     then
         echo "Config file was missing"
+        CheckConfig
         if [ ! -z "$configChecked" ]
         then
             echo "can not write config file"
             exit 0
         fi
-        CheckConfig
     fi
     source $CONFIG_FILE
     if [ ! -z $MB_BACKUP_LIST ]; then
@@ -281,19 +278,32 @@ function DoBackup {
                 if [ ! -e "$backup_folder/$folderName" ]; then
                     mkdir -p "$backup_folder/$folderName"
                 fi
-
+                now=$(date "+%m/%d/%Y %H:%M:%S")
                 infoFileFolders="$backup_folder/$folderName/backupFolders"
-                infoFileBackup="$backup_folder/$folderName/backups-$(date +%d-%m-%Y)"
+                infoFileBackup="$backup_folder/$folderName/backups-$(date -d "$now" "+%d-%m-%Y")"
                 infoFileLastBackup="$backup_folder/$folderName/lastBackup"
-                destinationFolder="$backup_folder/$folderName/$(date +%d-%m-%Y)"
-                destination="$destinationFolder/$folderName-$(date +%H-%M-%S).tar"
+                destinationFolder="$backup_folder/$folderName/$(date -d "$now" "+%d-%m-%Y")"
+                destination="$destinationFolder/$folderName-$(date -d "$now" "+%H-%M-%S").tar"
                 mkdir -p $(dirname $destination)
+                readarray -t files < $infoFileBackup
+                for fls in ${files[@]}; do
+                    if [ ! -z "$fls" ]; then
+                        if [ "$fls" == "$destination" ]; then
+                            echo "calculated out is already present exit to avoid duplication"
+                            echo "maybe the script is running more than once per second?"
+                            exit 0
+                        fi
+                    fi
+                done
+                unset files
+                unset fls
                 echo "$BACKUP_MODE" > "$backup_folder/$folderName/backupMode"
-                echo "$(date "+%d/%m/%Y ::: %H:%M:%S")" > $destination.time
+                echo "$(date -d "$now" "+%d/%m/%Y ::: %H:%M:%S")" > $destination.time
+                echo "$(date -d "$now" "+%s")" > $destination.timestamp
                 echo "$BACKUP_TAG" > $destination.tag
                 echo "$BACKUP_MODE" > $destination.mode
-                echo "$(date "+%d-%m-%Y")" > $infoFileLastBackup
-                echo "$(date "+%H:%M:%S")" > "$backup_folder/$folderName/lastTime"
+                echo "$(date -d "$now" "+%d-%m-%Y")" > $infoFileLastBackup
+                echo "$(date -d "$now" "+%H:%M:%S")" > "$backup_folder/$folderName/lastTime"
                 mkdir -p $destinationFolder
                 
                 echo "$origin" > "$backup_folder/$folderName/origin"
@@ -304,7 +314,7 @@ function DoBackup {
                     lastBackup=$(cat $infoFileLastBackup)
                 fi
 
-                date=$(date "+%d-%m-%Y")
+                date=$(date -d "$now" "+%d-%m-%Y")
                 if [ ! -e "$infoFileFolders" ]
                 then
                     echo "$date" >> $infoFileFolders
@@ -327,6 +337,7 @@ function DoBackup {
             2)
                 maxCopys=$item
                 echo ""
+                echo "--------------------------------------"
                 echo "Backing up   : $folderName"
                 echo "path         : $origin"
                 if [ ! -e "$origin" ]
@@ -337,6 +348,8 @@ function DoBackup {
                 fi
 
                 cd $(dirname $origin)
+                echo ""
+                echo "Packing files into a tarball..."
                 tar -cf "$destination" "$(basename $origin)"
 
                 if [ ! -z "$GetBackup" ]
@@ -351,6 +364,8 @@ function DoBackup {
 
                 declare -A NumberOfFilesByDate
                 totalNumber=0
+                echo "Search for oldest backups to delte..."
+                echo ""
                 EraseExtraCopys $maxCopys $folderName
                 i=0
             ;;
@@ -383,7 +398,7 @@ function EraseExtraCopys {
             for file in ${files[@]}
             do
                 filemode="$(cat $file.mode)"
-                if [ $erasedCopys -lt $copysToErase ] && [ "$filemode" == "AUTOMATIC" ]
+                if [ $erasedCopys -lt $copysToErase ] && ( [ "$filemode" == "AUTOMATIC" ]  || [ ! -z $DELETE_MANUAL ] || [ ! -z $FORCE ] )
                 then
                     rm $file
                     rm $file.*
@@ -427,7 +442,7 @@ function EraseExtraCopys {
                 then
                     file=${files[$date,${erasedCopysOnDate[$date]}]}
                     filemode="$(cat $file.mode)"
-                    if [ "$filemode" == "AUTOMATIC" ]; then
+                    if [ "$filemode" == "AUTOMATIC" ] || [ ! -z $DELETE_MANUAL ] || [ ! -z $FORCE ]; then
                         rm $file
                         rm $file.*
                         grep -v "${files[$date,${erasedCopysOnDate[$date]}]}" "backups-$date" > temp
@@ -463,6 +478,10 @@ function EraseExtraCopys {
     echo "TAG:         : $BACKUP_TAG"
     echo "MODE:        : $BACKUP_MODE"
     echo ""
+    Cleanup $folderName
+    echo $folderName backup complete!!
+    echo "--------------------------------------"
+    echo ""
 }
 
 function RestoreFile {
@@ -496,8 +515,11 @@ function ListAllBackups {
             PrintBackupFolderError
             exit 0
         fi
+        if [ ! -e $item/backupFolders ]; then
+            echo "No $(basename $item) backups yet"
+            continue
+        fi
         echo "Backup: $(basename $item)"
-        #echo "  Last updated: $(cat $item/lastBackup)  $(cat $item/lastTime)"
         file=$(tail $item/backups-$(cat $item/lastBackup) --lines=1)
         echo "      $file"
         if [ ! -e "$file.time" ]
@@ -521,13 +543,17 @@ function ListAllBackups {
 
 function ListBackups {
     LoadConfig
-    echo ""
     folder="$backup_folder/$1"
     if [ ! -e $folder ]
     then
         echo "that backup doesn't exist"
         exit 0
     fi
+    if [ ! -e $folder/backupFolders ]; then
+        echo "No backups yet"
+        exit 0
+    fi
+    echo ""
     readarray -t dates < "$folder/backupFolders"
     echo ${dates[@]}
     echo "Backups of: $1:"
@@ -537,16 +563,37 @@ function ListBackups {
         readarray -t files < "$folder/backups-$item"
         for item2 in ${files[@]}
         do
-            if [ ! -e "$item2.time" ]
-            then
-                echo "$item2.time  was missing, exiting.."
+            if [ ! -e "$item2" ]; then
+                echo ""
+                echo "Item: $item2 in track files was missing, will cleanup and list again"
+                Cleanup $1
+                echo "***********************************************"
+                echo ""
+                $MYSELF -L $1
                 exit 0
             fi
-            echo "      File: $item2"
-            echo "          Created at: $(cat $item2.time)"
-            echo "          tag       : $(cat $item2.tag)"
-            echo "          mode      : $(cat $item2.mode)"
-            echo ""
+            if [ ! -e "$item2.time" ] || [ ! -e "$item2.tag" ] || [ ! -e "$item2.mode" ] || [ ! -e "$item2.timestamp" ]
+            then
+                echo "One or more data track files were missing, omitting this item -> $item2"
+            else
+                tag=$(cat $item2.tag)
+                if [ ! -z $BACKUP_TAG ]; then
+                    if [ ! -z $(echo $tag | grep $BACKUP_TAG) ]; then
+                        echo "      File: $item2"
+                        echo "          Created at: $(cat $item2.time)"
+                        echo "          tag       : $tag"
+                        echo "          mode      : $(cat $item2.mode)"
+                        echo ""
+                    fi
+                else
+                    echo "      File: $item2"
+                    echo "          Created at: $(cat $item2.time)"
+                    echo "          tag       : $tag"
+                    echo "          mode      : $(cat $item2.mode)"
+                    echo ""
+                fi
+            fi
+            unset tag
         done
     done
     echo ""
@@ -596,9 +643,13 @@ function RemoveBackup {
     then
         echo "that backup doesn't exist"
     else
-        echo "you are about to delete all your backups on: $1"
-        echo -n "are you sure? [YES/n]: "
-        read response
+        if [ ! -z $FORCE ]; then
+            response=YES
+        else
+            echo "you are about to delete all your backups on: $1"
+            echo -n "are you sure? [YES/n]: "
+            read response
+        fi
         if [ "$response" == "YES" ]
         then
             rm -rf $folder
@@ -617,22 +668,18 @@ function DeleteSpecificBackup {
         exit 0
     fi
     GetFile $folder
-    echo "Are you sure you wanna delete the folloing backup?:"
-    echo "          $file"
-    echo -n "[YES/n]: "
-    read response
+    if [ ! -z $FORCE ]; then
+        response="YES"
+    else
+        echo "Are you sure you wanna delete the folloing backup?:"
+        echo "          $file"
+        echo -n "[YES/n]: "
+        read response
+    fi
     if [ "$response" == "YES" ]
     then
         rm $file
-        readarray -t files < "$folder/backups-$date"
-        rm "$folder/backups-$date"
-        for item in ${files[@]}
-        do
-            if [ -e "$item" ]
-            then
-                echo "$item" >> "$folder/backups-$date"
-            fi
-        done
+        Cleanup $1
     else
         exit 0
     fi
@@ -866,6 +913,169 @@ function ManualBackup {
         DoBackup
 }
 
+function Cleanup {
+    echo "Cleanup $1 backup data..."
+    myFolder=$backup_folder/$1
+    unset backupFolders
+    readarray -t backupFolders < $myFolder/backupFolders
+    for bDate in ${backupFolders[@]}; do
+        if [ -e "$myFolder/$bDate" ]; then
+            if [ ! -d "$myFolder/$bDate" ]; then
+                rm -rf "$myFolder/$bDate"
+            else
+                readarray -t backups < $myFolder/backups-$bDate
+                for bFile in ${backups[@]}; do
+                    if [ -e $bFile ] && [ ! -d $bFile ]; then
+                        tf+=("$bFile")
+                        thereIsFiles=1
+                    else
+                        rm -rf $bFile
+                        rm -rf $bFile.*
+                    fi
+                done
+                declare -A files
+                files["$bDate"]=${tf[@]}
+            fi
+            if [ ! -z $thereIsFiles ]; then
+                dirList+=("$bDate")
+                unset thereIsFiles
+            else
+                rm -rf $myFolder/$bDate
+                rm -rf $myFolder/backups-$bDate
+            fi
+        fi
+    done
+    rm $myFolder/backupFolders
+    for dts in ${dirList[@]}; do
+        rm $myFolder/backups-$dts
+        echo "$dts" >> $myFolder/backupFolders
+        for fls in ${files["$dts"]}; do
+            echo "$fls" >> $myFolder/backups-$dts
+        done
+    done
+    if [ ! -e $myFolder/backupFolders ]; then
+        rm -rf $myFolder/lastBackup
+        rm -rf $myFolder/backupMode
+        rm -rf $myFolder/lastTime
+    fi
+}
+
+function DeleteDate {
+    LoadConfig
+    folder="$backup_folder/$MB_NAME"
+    if [ ! -e $folder ]
+    then
+        echo "the backup at -> $folder doesn't exist"
+        exit 0
+    fi
+
+    if [ ! -e $folder/backupFolders ]; then
+        echo "There is no backups yet"
+    else
+        readarray -t backupFolders < $folder/backupFolders
+        for bDate in ${backupFolders[@]}; do
+            readarray -t backups < $folder/backups-$bDate
+            for bFile in ${backups[@]}; do
+                timestamp=$(cat $bFile.timestamp)
+                if [ "$(cat $bFile.mode)" == "MANUAL" ]; then
+                    isManual=1
+                fi
+                if [ -z $isManual ] || [ ! -z $DELETE_MANUAL ] || [ ! -z $FORCE ]; then
+                    if [ -z $OLDER ]; then
+                        if [ $timestamp -gt $USERTIME ]; then
+                            rm -rf $bFile
+                            rm -rf $bFile.*
+                        fi
+                    else
+                        if [ $timestamp -lt $USERTIME ]; then
+                            rm -rf $bFile
+                            rm -rf $bFile.*
+                        fi
+                    fi
+                fi
+                unset isManual
+            done
+        done
+        Cleanup $MB_NAME
+    fi
+}
+
+function DeleteManualOrAutomatic {
+    LoadConfig
+    folder="$backup_folder/$MB_NAME"
+    if [ ! -e $folder ]
+    then
+        echo "the backup at -> $folder does not exist"
+        exit 0
+    fi
+
+    if [ ! -e $folder/backupFolders ]; then
+        echo "There is no backups yet"
+    else
+        readarray -t backupFolders < $folder/backupFolders
+        for bDate in ${backupFolders[@]}; do
+            readarray -t backups < $folder/backups-$bDate
+            for bFile in ${backups[@]}; do
+                if [ "$(cat $bFile.mode)" == "$1" ]; then
+                    rm -rf $bFile
+                    rm -rf $bFile.*
+                fi
+            done
+        done
+        Cleanup $MB_NAME
+    fi
+}
+
+function DeleteByTag {
+    LoadConfig
+    folder="$backup_folder/$MB_NAME"
+    if [ ! -e $folder ]
+    then
+        echo "the backup at -> $folder doesn't exist"
+        exit 0
+    fi
+    if [ -z "$BACKUP_TAG" ]; then
+        echo "Delete by tag operation requires --tag"
+        exit 0
+    fi
+    if [ ! -e $folder/backupFolders ]; then
+        echo "There is no backups yet"
+    else
+        readarray -t backupFolders < $folder/backupFolders
+        for bDate in ${backupFolders[@]}; do
+            readarray -t backups < $folder/backups-$bDate
+            for bFile in ${backups[@]}; do
+                tag=$(cat $bFile.tag)
+                if [ ! -z "$tag" ]; then
+                    if [ "$tag" == "$BACKUP_TAG" ]; then
+                        rm $bFile.*
+                        rm $bFile
+                    fi
+                fi
+            done
+        done
+        Cleanup $MB_NAME
+    fi
+}
+
+function UninstallBaseFolder {
+    echo "About to erase $FOLDER"
+    if [ -z $FORCE ]; then
+        echo -n "[YES I'M FUCKING SHURE/No]: "
+        read opt
+        if [ "$opt" == "YES I'M FUCKING SHURE" ]; then
+            echo -n "erase folder? [Y/N]: "
+            read opt
+            if [ "$opt" == "Y" ] || [ "$opt" == "y" ]; then
+                rm -rf $FOLDER
+            fi
+        fi
+    else
+        echo "WARNING $FOLDER ERASED WITH --force"
+        rm -rf $FOLDER
+    fi
+}
+
 if [ $# -eq 0 ]; then
     PrintInfo
     exit 0
@@ -959,13 +1169,8 @@ while [ "$1" != "" ]; do
             fi
             CONFIG_FILE=$1
             if [ ! -e "$1" ]; then
-                echo -n "Supplied config file doesn't exist ¿create it? [Y/N]"
-                read opt
-                if [ "$opt" == "y" ] || [ "$opt" == "y" ]; then
-                    WriteConfigFile
-                else
-                    exit 0
-                fi
+                echo -n "Supplied config file doesn't exist created -> $1"
+                WriteConfigFile
             fi
         ;;
 
@@ -1004,16 +1209,7 @@ while [ "$1" != "" ]; do
 
         --uninstall-folder)
             CheckFirstArgument
-            echo "About to erase $FOLDER"
-            echo -n "[YES I'M FUCKING SHURE/No]: "
-            read opt
-            if [ "$opt" == "YES I'M FUCKING SHURE" ]; then
-                echo -n "erase folder? [Y/N]: "
-                read opt
-                if [ "$opt" == "Y" ] || [ "$opt" == "y" ]; then
-                    rm -rf $FOLDER
-                fi
-            fi
+            operation=UninstallBaseFolder
             exit 0
         ;;
 
@@ -1161,7 +1357,7 @@ while [ "$1" != "" ]; do
             arg=$1
             shift
             if [ "$1" == "" ]; then
-                echo "usage: $PROGNAME $arg <\"tag\">"
+                echo "usage: $PROGNAME [other options] $arg <\"tag\">"
                 exit 1
             fi
             BACKUP_TAG=$1
@@ -1178,9 +1374,98 @@ while [ "$1" != "" ]; do
             fi
             data=$1
         ;;
+
         -pv)
             echo $VERSION
             exit 0
+        ;;
+
+        -do|--delete-older-than)
+            CheckFirstArgument
+            h="usage: $PROGNAME $arg <backup-name> \"<month/day/year [optional]24hour:minute:second>\" [Optional] delete-manual"
+            shift
+            if [ "$1" == "" ]; then
+                echo $h
+                exit 1
+            fi
+            MB_NAME=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo $h
+                exit 1
+            fi
+            USERTIME=$(date -d "$1" "+%s")
+            shift
+            if [ "$1" == "delete-manual" ]; then
+                DELETE_MANUAL=1
+            fi
+            OLDER=1
+            operation="DeleteDate"
+        ;;
+
+        -dn|--delete-newer-than)
+            CheckFirstArgument
+            h="usage: $PROGNAME $arg <backup-name> \"<month/day/year [optional]24hour:minute:second>\" [Optional] delete-manual"
+            shift
+            if [ "$1" == "" ]; then
+                echo $h
+                exit 1
+            fi
+            MB_NAME=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo $h
+                exit 1
+            fi
+            USERTIME=$(date -d "$1" "+%s")
+            shift
+            if [ "$1" == "delete-manual" ] || [ "$1" == "--delete-manual" ] || [ "$1" == "--force" ] || [ "$1" == "-f" ]; then
+                DELETE_MANUAL=1
+            fi
+            operation="DeleteDate"
+        ;;
+
+        --delete-manual)
+            DELETE_MANUAL=1
+        ;;
+
+        -f|--force)
+            FORCE=1
+        ;;
+
+        -da|--delete-automatic-backups)
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <backup-name>"
+                exit 1
+            fi
+            MB_NAME=$1
+            operation=DeleteManualOrAutomatic
+            data=AUTOMATIC
+        ;;
+
+        -dm|--delte-manual-backups)
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <backup-name>"
+                exit 1
+            fi
+            MB_NAME=$1
+            operation=DeleteManualOrAutomatic
+            data=MANUAL
+        ;;
+
+        -dt|--delete-by-tag)
+            arg=$1
+            shift
+            if [ "$1" == "" ]; then
+                echo "usage: $PROGNAME $arg <backup-name>"
+                exit 1
+            fi
+            MB_NAME=$1
+            operation=DeleteByTag
         ;;
 
         *)
@@ -1197,11 +1482,14 @@ done
 case $operation in
     
     ManualBackup)
+        echo "+++++++++++++++++++++++++++++++++++++++++++++++++++"
         ManualBackup
+        echo "+++++++++++++++++++++++++++++++++++++++++++++++++++"
         exit 0
     ;;
 
     DoBackup)
+        echo "+++++++++++++++++++++++++++++++++++++++++++++++++++"
         LoadBackupCfg
         if [ ! -z $MB_FOLDER ]; then
             echo "WARNING: BACKUP FOLDER OVERRIDEN, OUTPUT TO-> $MB_FOLDER"
@@ -1221,6 +1509,7 @@ case $operation in
             done
         fi
         DoBackup
+        echo "+++++++++++++++++++++++++++++++++++++++++++++++++++"
         exit 0
     ;;
 

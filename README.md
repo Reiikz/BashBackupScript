@@ -5,6 +5,11 @@ To install it dump the file named "backup" into "/usr/local/bin" and make it exe
 anyway, you can use it as it is on whatever location you want.
 use -h to get help like:
 backup -h
+If you install the .deb package you can see the manpage for detailed descriptions.
+If you want to build this package to install the latest version I provided
+a very short script that should work on any debian based distro that has installed
+the commands gzip and dpkg-deb
+
 
 If you wanna check the package here is my public key
 

@@ -1,5 +1,5 @@
 ./" this is the man page for bash backup script
-.TH backup "29/08/2019" "V1.3.0" "backup man page"
+.TH backup "29/08/2019" "V1.4.0" "backup man page"
 
 .SH NAME
 backup - simple easy to use commandline script for managing backups
@@ -45,8 +45,14 @@ This program makes all backups a tar file, so it can be a little cpu intensive.
     Will mark any backup run as manual (the default is automatic)
     manual backups won't be automatically deleted but still count as a slot
 
-.IP --tag
-    To be used with --run or --manual-backup, it sets a tag for the file, otherwise will be empty
+.IP -l|--list-all-backups
+    Shows a summary of all backups
+
+.IP -L|--list-backups <backup-name>
+    Shows all backups for a specific item, you can filter by tag with --tag
+
+.IP -t|--tag
+    To be used with --run or --manual-backup, it sets a tag for the file, otherwise will be empty, when used with -L will show only backups which match the provided tag
 
 .IP --target-path <path>
     Indicates the target wich will be backed up, to be used ONLY with --manual-backup
@@ -96,6 +102,27 @@ This program makes all backups a tar file, so it can be a little cpu intensive.
 
 .IP -D|--delete-backup-file <backup-name>
     Deletes a backed up file, asks the user which one
+
+.IP -do|--delete-older-than <backup-name> <date-in-date-command-format> delete-manual|nothing
+    Deletes a copys older than a certain date, plus you can specify if you want to delete copys marked as manual by typing delete-manual at the end by omission is false
+
+.IP -dn|--delete-newer-than <backup-name> <date-in-date-command-format> delete-manual|nothing
+    Deletes a copys newer than a certain date, plus you can specify if you want to delete copys marked as manual by typing delete-manual at the end by omission is false
+
+.IP --delte-manual
+    Tells the script to include manual backups on erase operations
+
+.IP -da|--delete-automatic-backups <backup-name>
+    Deletes every atuomatic backup
+
+.IP -da|--delete-manual-backups <backup-name>
+    Deletes every manual backup
+
+.IP -dt|--delete-by-tag <backup-name>
+    Deletes any backup which matches with a tag requires --tag
+
+.IP -f|--force
+    Tells the script to not ask the user and take the course of action which implies disk modification, for example backup -d apt --force will delete all backups called apt without asking the user, it will also override manual backup checks so THEY WILL GET ERASED TOO
 
 .IP -P|--export-backups <output-file>
     Exports all your backup folder and config to be imported into another machine

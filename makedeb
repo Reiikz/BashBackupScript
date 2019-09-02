@@ -8,12 +8,13 @@ HOMEPAGE="https://github.com/reiikz"
 RECOMENDS="Cron"
 DESCRIPTION="Simple bash script that let's you make backups easily."
 PRIORITY="optional"
+ARCH="all"
 
 me=$0
 dir=$(realpath $(dirname $me))
 cd $dir
 version=$(./backup -pv)
-base_folder="$PACKAGE_NAME"_"$version"
+base_folder="$PACKAGE_NAME"_"$version"_"$ARCH"
 man_location="$base_folder/usr/share/man/man5/"
 script_location="$base_folder/usr/bin"
 control="$base_folder/DEBIAN"
@@ -39,7 +40,7 @@ chmod 755 "$script_location/$PROGRAM_NAME"
 mkdir -p $control
 echo "Package: $PACKAGE_NAME" >> $control_file
 echo "Version: $version" >> $control_file
-echo "Architecture: all" >> $control_file
+echo "Architecture: $ARCH" >> $control_file
 echo "Maintainer: $MAINTAINER" >> $control_file
 echo "Depends: $DEPENDS" >> $control_file
 echo "Homepage: $HOMEPAGE" >> $control_file
