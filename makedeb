@@ -1,0 +1,51 @@
+#!/bin/bash
+PACKAGE_NAME="bash-backup"
+PROGRAM_NAME="backup"
+MAN_ORIGIN="man/backup.en.5"
+MAINTAINER="Reiikz"
+DEPENDS="coreutils, tar"
+HOMEPAGE="https://github.com/reiikz"
+RECOMENDS="Cron"
+DESCRIPTION="Simple bash script that let's you make backups easily."
+PRIORITY="optional"
+
+me=$0
+dir=$(realpath $(dirname $me))
+cd $dir
+version=$(./backup -pv)
+base_folder="$PACKAGE_NAME"_"$version"
+man_location="$base_folder/usr/share/man/man5/"
+script_location="$base_folder/usr/bin"
+control="$base_folder/DEBIAN"
+control_file="$base_folder/DEBIAN/control"
+
+#check if folder exists
+if [ -e "$base_folder" ]; then
+    rm -rf $base_folder
+fi
+
+#create and build manual
+mkdir -p $man_location
+cp $MAN_ORIGIN "$man_location/$(basename $MAN_ORIGIN)"
+gzip -9 "$man_location/$(basename $MAN_ORIGIN)"
+chmod 611 "$man_location/$(basename $MAN_ORIGIN).gz"
+
+#situate script
+mkdir -p $script_location
+cp $PROGRAM_NAME "$script_location"
+chmod 755 "$script_location/$PROGRAM_NAME"
+
+#echo the control file
+mkdir -p $control
+echo "Package: $PACKAGE_NAME" >> $control_file
+echo "Version: $version" >> $control_file
+echo "Architecture: all" >> $control_file
+echo "Maintainer: $MAINTAINER" >> $control_file
+echo "Depends: $DEPENDS" >> $control_file
+echo "Homepage: $HOMEPAGE" >> $control_file
+echo "Recomends: $RECOMENDS" >> $control_file
+echo "Description: $DESCRIPTION" >> $control_file
+echo "Priority: $PRIORITY" >> $control_file
+
+#actually build the deb file
+dpkg-deb --build $base_folder
