@@ -285,7 +285,9 @@ function DoBackup {
                 destinationFolder="$backup_folder/$folderName/$(date -d "$now" "+%d-%m-%Y")"
                 destination="$destinationFolder/$folderName-$(date -d "$now" "+%H-%M-%S").tar"
                 mkdir -p $(dirname $destination)
-                readarray -t files < $infoFileBackup
+                if [ -e $infoFileBackup ]; then
+                    readarray -t files < $infoFileBackup
+                fi
                 for fls in ${files[@]}; do
                     if [ ! -z "$fls" ]; then
                         if [ "$fls" == "$destination" ]; then
