@@ -1,7 +1,7 @@
 #!/bin/bash
 PACKAGE_NAME="bash-backup"
 PROGRAM_NAME="backup"
-MAN_ORIGIN="man/backup.en.5"
+MAN_ORIGIN="man/backup.5"
 MAINTAINER="Reiikz"
 DEPENDS="coreutils, tar"
 HOMEPAGE="https://github.com/reiikz"
@@ -29,7 +29,7 @@ fi
 mkdir -p $man_location
 cp $MAN_ORIGIN "$man_location/$(basename $MAN_ORIGIN)"
 gzip -9 "$man_location/$(basename $MAN_ORIGIN)"
-chmod 611 "$man_location/$(basename $MAN_ORIGIN).gz"
+chmod 755 "$man_location/$(basename $MAN_ORIGIN).gz"
 
 #situate script
 mkdir -p $script_location
