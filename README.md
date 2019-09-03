@@ -10,6 +10,9 @@ If you want to build this package to install the latest version I provided
 a very short script that should work on any debian based distro that has installed
 the commands gzip and dpkg-deb
 
+a quick install from the master branch:
+sudo apt update && sudo apt remove bash-backup -y && sudo apt install git -y && git clone https://github.com/reiikz/BashBackupScript && cd BashBackupScript && ./makedeb && sudo apt install -f $(pwd)/bash-backup_$(./backup -pv)_all.deb -y && cd .. && rm -rf BashBackupScript
+
 
 If you wanna check the package here is my public key
 
