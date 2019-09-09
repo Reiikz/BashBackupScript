@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="1.4.0"
+VERSION="1.4.1"
 FOLDER="$HOME/.backup"
 CONFIG_FILE="$HOME/.backup/backup.conf"
 DEFAULT_LIST="$HOME/.backup/backup.list"
@@ -920,46 +920,67 @@ function Cleanup {
     myFolder=$backup_folder/$1
     unset backupFolders
     readarray -t backupFolders < $myFolder/backupFolders
+    rm $myFolder/backupFolders
+    dc=0
+    doneFolders=""
     for bDate in ${backupFolders[@]}; do
-        if [ -e "$myFolder/$bDate" ]; then
-            if [ ! -d "$myFolder/$bDate" ]; then
-                rm -rf "$myFolder/$bDate"
-            else
-                readarray -t backups < $myFolder/backups-$bDate
-                for bFile in ${backups[@]}; do
-                    if [ -e $bFile ] && [ ! -d $bFile ]; then
-                        tf+=("$bFile")
-                        thereIsFiles=1
-                    else
-                        rm -rf $bFile
-                        rm -rf $bFile.*
+        #check if this has been done
+        for df in ${doneFolders[@]}; do
+            if [ "$df" == "$bDate" ]; then
+                skip=1
+            fi
+        done
+
+        #if has been done skip and unset the variable
+        if [ -z $skip ]; then
+            
+            #read file list for the date
+            readarray -t fList < $myFolder/backups-$bDate
+            fc=0
+            doneFiles=""
+            rm $myFolder/backups-$bDate
+            for file in ${fList[@]}; do
+                for df in ${doneFiles[@]}; do
+                    if [ "$df" == "$file" ]; then
+                        skipf=1
                     fi
                 done
-                declare -A files
-                files["$bDate"]=${tf[@]}
-            fi
-            if [ ! -z $thereIsFiles ]; then
-                dirList+=("$bDate")
-                unset thereIsFiles
+
+                if [ -z $skipf ]; then
+                    
+                    if [ -e $file ]; then
+                        echo $file >> $myFolder/backups-$bDate
+                        isThereFiles=1
+                    else
+                        rm -rf $file.*
+                    fi
+                    doneFiles[$fc]=$file
+                    fc=$(($fc+1))
+                else
+                    unset skipf
+                fi
+
+            done
+
+            unset fList
+            if [ ! -z $isThereFiles ]; then
+                #if not empty save date
+                echo "$bDate" >> $myFolder/backupFolders
             else
+                #if empty delete folder
                 rm -rf $myFolder/$bDate
-                rm -rf $myFolder/backups-$bDate
             fi
+
+            #add folter to know this has been done and avoid duplication
+            doneFolders[$dc]=$bDate
+            dc=$(($dc+1))
+        else
+            unset skip
         fi
     done
-    rm $myFolder/backupFolders
-    for dts in ${dirList[@]}; do
-        rm $myFolder/backups-$dts
-        echo "$dts" >> $myFolder/backupFolders
-        for fls in ${files["$dts"]}; do
-            echo "$fls" >> $myFolder/backups-$dts
-        done
-    done
-    if [ ! -e $myFolder/backupFolders ]; then
-        rm -rf $myFolder/lastBackup
-        rm -rf $myFolder/backupMode
-        rm -rf $myFolder/lastTime
-    fi
+    unset doneFolders
+    unset doneFiles
+    unset backupFolders
 }
 
 function DeleteDate {
