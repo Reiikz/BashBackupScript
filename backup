@@ -366,7 +366,7 @@ function DoBackup {
 
                 declare -A NumberOfFilesByDate
                 totalNumber=0
-                echo "Search for oldest backups to delte..."
+                echo "Search for oldest backups to delete..."
                 echo ""
                 EraseExtraCopys $maxCopys $folderName
                 i=0
